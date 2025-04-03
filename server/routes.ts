@@ -317,6 +317,433 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Internal server error" });
     }
   });
+  
+  // Team management endpoints
+  router.get("/teams", async (req: Request, res: Response) => {
+    try {
+      const teams = await storage.getAllTeams();
+      res.json(teams);
+    } catch (error) {
+      console.error("Error fetching teams:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  router.get("/teams/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid team ID" });
+      }
+      
+      const team = await storage.getTeam(id);
+      
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+      
+      res.json(team);
+    } catch (error) {
+      console.error("Error fetching team:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  router.post("/teams", async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        name: z.string(),
+        ownerId: z.number(),
+        description: z.string().optional()
+      });
+      
+      const teamData = schema.parse(req.body);
+      const team = await storage.createTeam(teamData);
+      res.status(201).json(team);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors });
+      }
+      console.error("Error creating team:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Desktop Agent API Endpoints
+  
+  // Screenshots
+  router.post("/screenshots", async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        userId: z.number(),
+        teamId: z.number().optional().nullable(),
+        timestamp: z.string(),
+        imageData: z.string(),
+        application: z.string().optional().nullable(),
+        website: z.string().optional().nullable(),
+        title: z.string().optional().nullable()
+      });
+      
+      const screenshotData = schema.parse(req.body);
+      
+      console.log(`Screenshot received from user ${screenshotData.userId} at ${screenshotData.timestamp}`);
+      console.log(`Application: ${screenshotData.application}, Website: ${screenshotData.website}`);
+      
+      // Save the screenshot using our storage method
+      const timestamp = new Date(screenshotData.timestamp);
+      const screenshot = await storage.createScreenshot({
+        ...screenshotData,
+        timestamp
+      });
+      
+      // Also create an activity record for the screenshot
+      await storage.createActivity({
+        userId: screenshotData.userId,
+        teamId: screenshotData.teamId,
+        startTime: timestamp,
+        endTime: timestamp,
+        duration: 0,
+        application: screenshotData.application || "Unknown",
+        website: screenshotData.website || null,
+        title: screenshotData.title || null,
+        category: "Screenshot",
+        isActive: true
+      });
+      
+      res.status(201).json(screenshot);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors });
+      }
+      console.error("Error handling screenshot:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  router.get("/users/:userId/screenshots", async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      if (isNaN(userId)) {
+        return res.status(400).json({ message: "Invalid user ID" });
+      }
+      
+      // Parse date filters if provided
+      let startDate: Date | undefined;
+      let endDate: Date | undefined;
+      
+      if (req.query.startDate) {
+        startDate = new Date(req.query.startDate as string);
+      }
+      
+      if (req.query.endDate) {
+        endDate = new Date(req.query.endDate as string);
+      }
+      
+      const screenshots = await storage.getScreenshotsByUserId(userId, startDate, endDate);
+      res.json(screenshots);
+    } catch (error) {
+      console.error("Error fetching screenshots:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Alerts for restricted applications
+  router.post("/alerts", async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        userId: z.number(),
+        teamId: z.number().optional().nullable(),
+        timestamp: z.string(),
+        application: z.string(),
+        website: z.string().optional().nullable(),
+        title: z.string().optional().nullable(),
+        message: z.string(),
+        actionTaken: z.string()
+      });
+      
+      const alertData = schema.parse(req.body);
+      
+      console.log(`Alert received from user ${alertData.userId} at ${alertData.timestamp}`);
+      console.log(`Application: ${alertData.application}, Message: ${alertData.message}, Action: ${alertData.actionTaken}`);
+      
+      // Save the alert using our storage method
+      const timestamp = new Date(alertData.timestamp);
+      const alert = await storage.createAlert({
+        ...alertData,
+        timestamp
+      });
+      
+      // Also create an activity record for the alert
+      await storage.createActivity({
+        userId: alertData.userId,
+        teamId: alertData.teamId,
+        startTime: timestamp,
+        endTime: timestamp,
+        duration: 0,
+        application: alertData.application,
+        website: alertData.website || null,
+        title: alertData.title || null,
+        category: "Alert",
+        isActive: true
+      });
+      
+      res.status(201).json(alert);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors });
+      }
+      console.error("Error handling alert:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  router.get("/users/:userId/alerts", async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      if (isNaN(userId)) {
+        return res.status(400).json({ message: "Invalid user ID" });
+      }
+      
+      // Parse date filters if provided
+      let startDate: Date | undefined;
+      let endDate: Date | undefined;
+      
+      if (req.query.startDate) {
+        startDate = new Date(req.query.startDate as string);
+      }
+      
+      if (req.query.endDate) {
+        endDate = new Date(req.query.endDate as string);
+      }
+      
+      const alerts = await storage.getAlertsByUserId(userId, startDate, endDate);
+      res.json(alerts);
+    } catch (error) {
+      console.error("Error fetching alerts:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Agent Status
+  router.post("/agent-status", async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        userId: z.number(),
+        teamId: z.number().optional().nullable(),
+        timestamp: z.string(),
+        version: z.string(),
+        platform: z.enum(["windows", "macos"]),
+        isRunning: z.boolean(),
+        isConnected: z.boolean(),
+        lastActivityTime: z.string(),
+        cpuUsage: z.number(),
+        memoryUsage: z.number(),
+        diskSpace: z.number()
+      });
+      
+      const statusData = schema.parse(req.body);
+      
+      console.log(`Status update from user ${statusData.userId} at ${statusData.timestamp}`);
+      console.log(`Agent version: ${statusData.version}, Platform: ${statusData.platform}, Running: ${statusData.isRunning}`);
+      
+      // Save the agent status using our storage method
+      const timestamp = new Date(statusData.timestamp);
+      const lastActivityTime = new Date(statusData.lastActivityTime);
+      const status = await storage.createAgentStatus({
+        ...statusData,
+        timestamp,
+        lastActivityTime
+      });
+      
+      // Update user status
+      await storage.updateUserStatus(
+        statusData.userId, 
+        statusData.isConnected ? "active" : "offline"
+      );
+      
+      res.status(200).json(status);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors });
+      }
+      console.error("Error handling agent status:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  router.get("/users/:userId/agent-status", async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      if (isNaN(userId)) {
+        return res.status(400).json({ message: "Invalid user ID" });
+      }
+      
+      const status = await storage.getLatestAgentStatus(userId);
+      
+      if (!status) {
+        return res.status(404).json({ message: "No agent status found for this user" });
+      }
+      
+      res.json(status);
+    } catch (error) {
+      console.error("Error fetching agent status:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Agent Configuration
+  router.get("/agent-config", async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId ? parseInt(req.query.userId as string) : null;
+      
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+      
+      // Fetch the agent configuration from storage
+      const config = await storage.getAgentConfig(userId);
+      
+      if (!config) {
+        // Return a default configuration if none exists for this user
+        return res.json({
+          userId,
+          screenshotFrequency: 5,
+          activityTrackingInterval: 5,
+          idleThreshold: 60,
+          monitorApplications: true,
+          monitorWebsites: true,
+          captureScreenshots: true,
+          privateMode: false,
+          enforceRestrictedApps: true,
+          workingHoursEnabled: true,
+          workingHoursStart: "09:00",
+          workingHoursEnd: "17:00",
+          workingDays: [1, 2, 3, 4, 5]
+        });
+      }
+      
+      res.json(config);
+    } catch (error) {
+      console.error("Error fetching agent config:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  router.post("/agent-config", async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        userId: z.number(),
+        teamId: z.number().optional().nullable(),
+        screenshotFrequency: z.number(),
+        activityTrackingInterval: z.number(),
+        idleThreshold: z.number(),
+        monitorApplications: z.boolean(),
+        monitorWebsites: z.boolean(),
+        captureScreenshots: z.boolean(),
+        privateMode: z.boolean(),
+        enforceRestrictedApps: z.boolean(),
+        workingHoursEnabled: z.boolean(),
+        workingHoursStart: z.string(),
+        workingHoursEnd: z.string(),
+        workingDays: z.array(z.number())
+      });
+      
+      const configData = schema.parse(req.body);
+      
+      // Check if this user already has a configuration
+      const existingConfig = await storage.getAgentConfig(configData.userId);
+      
+      if (existingConfig) {
+        // Update the existing configuration
+        const updatedConfig = await storage.updateAgentConfig(existingConfig.id, configData);
+        return res.json(updatedConfig);
+      } else {
+        // Create a new configuration
+        const newConfig = await storage.createAgentConfig(configData);
+        return res.status(201).json(newConfig);
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors });
+      }
+      console.error("Error saving agent config:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Restricted Applications
+  router.get("/restricted-apps", async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId ? parseInt(req.query.userId as string) : null;
+      const teamId = req.query.teamId ? parseInt(req.query.teamId as string) : undefined;
+      
+      // If we have a userId but no teamId, try to find the team for this user
+      if (userId && !teamId) {
+        const user = await storage.getUser(userId);
+        if (user && user.teamId) {
+          const apps = await storage.getRestrictedApps(user.teamId);
+          return res.json(apps);
+        }
+      }
+      
+      // If we have a teamId, get restricted apps for that team
+      if (teamId) {
+        const apps = await storage.getRestrictedApps(teamId);
+        return res.json(apps);
+      }
+      
+      // Otherwise return all restricted apps
+      const apps = await storage.getRestrictedApps();
+      res.json(apps);
+    } catch (error) {
+      console.error("Error fetching restricted apps:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  router.post("/restricted-apps", async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        name: z.string(),
+        teamId: z.number(),
+        platform: z.string(),
+        alertThreshold: z.number(),
+        closeAfterAlert: z.boolean(),
+        alertMessage: z.string().optional(),
+        processNames: z.array(z.string())
+      });
+      
+      const appData = schema.parse(req.body);
+      const app = await storage.createRestrictedApp(appData);
+      res.status(201).json(app);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors });
+      }
+      console.error("Error creating restricted app:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  router.delete("/restricted-apps/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid restricted app ID" });
+      }
+      
+      const result = await storage.deleteRestrictedApp(id);
+      
+      if (!result) {
+        return res.status(404).json({ message: "Restricted app not found" });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting restricted app:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 
   // Use the router with a base URL prefix
   app.use("/api", router);
