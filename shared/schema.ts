@@ -2,6 +2,24 @@ import { pgTable, text, serial, integer, timestamp, boolean, jsonb, real } from 
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Organizations table
+export const organizations = pgTable("organizations", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  contactEmail: text("contact_email").notNull(),
+  contactPhone: text("contact_phone"),
+  createdAt: timestamp("created_at").defaultNow(),
+  settings: jsonb("settings").default({}),
+  logoUrl: text("logo_url"),
+  isActive: boolean("is_active").default(true),
+});
+
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Users table
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -15,6 +33,7 @@ export const users = pgTable("users", {
   status: text("status").default("offline"),
   lastActive: timestamp("last_active"),
   teamId: integer("team_id"),
+  organizationId: integer("organization_id"),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -29,6 +48,7 @@ export const teams = pgTable("teams", {
   name: text("name").notNull(),
   description: text("description"),
   ownerId: integer("owner_id").notNull(),
+  organizationId: integer("organization_id"),
 });
 
 export const insertTeamSchema = createInsertSchema(teams).omit({
@@ -202,6 +222,9 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
 });
 
 // Type definitions
+export type Organization = typeof organizations.$inferSelect;
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 

@@ -10,26 +10,33 @@ import {
   alerts, type Alert, type InsertAlert,
   agentStatus, type AgentStatus, type InsertAgentStatus,
   restrictedApps, type RestrictedApp, type InsertRestrictedApp,
-  agentConfig, type AgentConfig, type InsertAgentConfig
+  agentConfig, type AgentConfig, type InsertAgentConfig,
+  organizations, type Organization, type InsertOrganization
 } from "@shared/schema";
 
 export interface IStorage {
+  // Organization management
+  getOrganization(id: number): Promise<Organization | undefined>;
+  getOrganizationByName(name: string): Promise<Organization | undefined>;
+  createOrganization(organization: InsertOrganization): Promise<Organization>;
+  getAllOrganizations(): Promise<Organization[]>;
+
   // User management
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUserStatus(id: number, status: string): Promise<User | undefined>;
-  getAllUsers(): Promise<User[]>;
+  getAllUsers(organizationId?: number): Promise<User[]>;
 
   // Team management
   getTeam(id: number): Promise<Team | undefined>;
   createTeam(team: InsertTeam): Promise<Team>;
-  getAllTeams(): Promise<Team[]>;
+  getAllTeams(organizationId?: number): Promise<Team[]>;
   
   // Activity tracking
   createActivity(activity: InsertActivity): Promise<Activity>;
   getActivitiesByUserId(userId: number, startDate?: Date, endDate?: Date): Promise<Activity[]>;
-  getRecentActivities(limit?: number): Promise<Activity[]>;
+  getRecentActivities(limit?: number, organizationId?: number): Promise<Activity[]>;
 
   // Application and website tracking
   getApplications(): Promise<Application[]>;
@@ -40,10 +47,10 @@ export interface IStorage {
   // Summary statistics
   getDailySummary(userId: number, date: Date): Promise<DailySummary | undefined>;
   createDailySummary(summary: InsertDailySummary): Promise<DailySummary>;
-  getTeamSummaries(startDate?: Date, endDate?: Date): Promise<DailySummary[]>;
+  getTeamSummaries(startDate?: Date, endDate?: Date, organizationId?: number): Promise<DailySummary[]>;
 
   // Projects
-  getProjects(): Promise<Project[]>;
+  getProjects(organizationId?: number): Promise<Project[]>;
   createProject(project: InsertProject): Promise<Project>;
 
   // Desktop Agent Screenshot functionality
@@ -64,16 +71,17 @@ export interface IStorage {
   updateAgentConfig(id: number, config: Partial<AgentConfig>): Promise<AgentConfig | undefined>;
   
   // Restricted Applications
-  getRestrictedApps(teamId?: number): Promise<RestrictedApp[]>;
+  getRestrictedApps(teamId?: number, organizationId?: number): Promise<RestrictedApp[]>;
   createRestrictedApp(app: InsertRestrictedApp): Promise<RestrictedApp>;
   deleteRestrictedApp(id: number): Promise<boolean>;
 
   // Dashboard metrics
-  getTeamOverview(): Promise<any>;
-  getDashboardMetrics(): Promise<any>;
+  getTeamOverview(organizationId?: number): Promise<any>;
+  getDashboardMetrics(organizationId?: number): Promise<any>;
 }
 
 export class MemStorage implements IStorage {
+  private organizations: Map<number, Organization>;
   private users: Map<number, User>;
   private teams: Map<number, Team>;
   private activities: Map<number, Activity>;
@@ -87,6 +95,7 @@ export class MemStorage implements IStorage {
   private agentConfigs: Map<number, AgentConfig>;
   private restrictedApps: Map<number, RestrictedApp>;
   
+  private organizationId: number;
   private userId: number;
   private teamId: number;
   private activityId: number;
@@ -101,6 +110,7 @@ export class MemStorage implements IStorage {
   private restrictedAppId: number;
 
   constructor() {
+    this.organizations = new Map();
     this.users = new Map();
     this.teams = new Map();
     this.activities = new Map();
@@ -114,6 +124,7 @@ export class MemStorage implements IStorage {
     this.agentConfigs = new Map();
     this.restrictedApps = new Map();
     
+    this.organizationId = 1;
     this.userId = 1;
     this.teamId = 1;
     this.activityId = 1;
@@ -131,7 +142,29 @@ export class MemStorage implements IStorage {
   }
 
   private seedInitialData() {
-    // Seed teams first
+    // Seed organizations first
+    const initialOrganizations = [
+      { 
+        name: 'Acme Corporation', 
+        description: 'Global technology company', 
+        contactEmail: 'contact@acme.com',
+        contactPhone: '(555) 123-4567',
+        logoUrl: 'https://example.com/acme_logo.png',
+      },
+      { 
+        name: 'Globex Industries', 
+        description: 'Manufacturing and logistics', 
+        contactEmail: 'info@globex.com',
+        contactPhone: '(555) 987-6543',
+        logoUrl: 'https://example.com/globex_logo.png',
+      }
+    ];
+    
+    initialOrganizations.forEach(org => {
+      this.createOrganization(org);
+    });
+    
+    // Seed teams
     const initialTeams = [
       { name: 'Development Team', description: 'Software engineers and developers', ownerId: 5 },
       { name: 'Marketing Team', description: 'Marketing and brand specialists', ownerId: 5 },
@@ -144,11 +177,11 @@ export class MemStorage implements IStorage {
 
     // Seed users
     const initialUsers = [
-      { username: 'amyk', password: 'password', name: 'Amy Kirkland', email: 'amy@example.com', department: 'Development', role: 'user', avatarColor: '#0078D4', teamId: 1, lastActive: new Date() },
-      { username: 'johnm', password: 'password', name: 'John Miller', email: 'john@example.com', department: 'Marketing', role: 'user', avatarColor: '#2B88D8', teamId: 2, lastActive: new Date() },
-      { username: 'sarahl', password: 'password', name: 'Sarah Lee', email: 'sarah@example.com', department: 'Sales', role: 'user', avatarColor: '#FFB900', teamId: 3, lastActive: new Date() },
-      { username: 'robertj', password: 'password', name: 'Robert Johnson', email: 'robert@example.com', department: 'HR', role: 'user', avatarColor: '#E81123', teamId: 1, lastActive: new Date() },
-      { username: 'admin', password: 'admin', name: 'Admin User', email: 'admin@example.com', department: 'IT', role: 'admin', avatarColor: '#107C10', lastActive: new Date() }
+      { username: 'amyk', password: 'password', name: 'Amy Kirkland', email: 'amy@example.com', department: 'Development', role: 'user', avatarColor: '#0078D4', teamId: 1, organizationId: 1, lastActive: new Date() },
+      { username: 'johnm', password: 'password', name: 'John Miller', email: 'john@example.com', department: 'Marketing', role: 'user', avatarColor: '#2B88D8', teamId: 2, organizationId: 1, lastActive: new Date() },
+      { username: 'sarahl', password: 'password', name: 'Sarah Lee', email: 'sarah@example.com', department: 'Sales', role: 'user', avatarColor: '#FFB900', teamId: 3, organizationId: 1, lastActive: new Date() },
+      { username: 'robertj', password: 'password', name: 'Robert Johnson', email: 'robert@example.com', department: 'HR', role: 'user', avatarColor: '#E81123', teamId: 1, organizationId: 1, lastActive: new Date() },
+      { username: 'admin', password: 'admin', name: 'Admin User', email: 'admin@example.com', department: 'IT', role: 'admin', avatarColor: '#107C10', organizationId: 2, lastActive: new Date() }
     ];
     
     initialUsers.forEach(user => {
@@ -343,22 +376,27 @@ export class MemStorage implements IStorage {
       });
     };
 
-    // User 1 activities
+    // User 1 activities (Organization 1)
     createActivity(1, 'Visual Studio Code', 120, 'productive');
     createActivity(1, 'Microsoft Teams', 45, 'productive');
     createActivity(1, 'Google Chrome', 30, 'neutral', 'github.com');
     
-    // User 2 activities
+    // User 2 activities (Organization 1)
     createActivity(2, 'Photoshop', 90, 'productive');
     createActivity(2, 'Google Chrome', 60, 'neutral', 'docs.google.com');
     
-    // User 3 activities
+    // User 3 activities (Organization 1)
     createActivity(3, 'Salesforce', 150, 'productive');
     createActivity(3, 'Outlook', 45, 'productive');
     
-    // User 4 activities
+    // User 4 activities (Organization 1)
     createActivity(4, 'Workday', 110, 'productive');
     createActivity(4, 'Google Chrome', 60, 'unproductive', 'youtube.com');
+    
+    // User 5 activities (Organization 2 - Admin)
+    createActivity(5, 'Visual Studio Code', 180, 'productive');
+    createActivity(5, 'Microsoft Teams', 90, 'productive');
+    createActivity(5, 'Google Chrome', 45, 'neutral', 'github.com');
 
     // Seed daily summaries
     const today = new Date();
@@ -434,6 +472,24 @@ export class MemStorage implements IStorage {
         { url: 'docs.google.com', time: 30 * 60, category: 'productive' }
       ]
     });
+    
+    // Admin user summary (Organization 2)
+    this.createDailySummary({
+      userId: 5,
+      date: today,
+      activeTime: 8 * 3600 + 45 * 60, // 8h 45m
+      productiveTime: 7 * 3600 + 30 * 60, // 7h 30m
+      neutralTime: 1 * 3600 + 15 * 60, // 1h 15m
+      unproductiveTime: 0,
+      productivityScore: 90,
+      topApplications: [
+        { name: 'VS Code', time: 5 * 3600 + 15 * 60, category: 'productive' },
+        { name: 'Microsoft Teams', time: 2 * 3600 + 15 * 60, category: 'productive' }
+      ],
+      topWebsites: [
+        { url: 'github.com', time: 1 * 3600 + 15 * 60, category: 'productive' }
+      ]
+    });
   }
 
   // User management
@@ -447,7 +503,17 @@ export class MemStorage implements IStorage {
 
   async createUser(user: InsertUser): Promise<User> {
     const id = this.userId++;
-    const newUser: User = { ...user, id, status: 'offline' };
+    const newUser: User = { 
+      ...user, 
+      id, 
+      status: 'offline',
+      department: user.department || null,
+      role: user.role || null,
+      avatarColor: user.avatarColor || null,
+      lastActive: user.lastActive || new Date(),
+      teamId: user.teamId || null,
+      organizationId: user.organizationId || null
+    };
     this.users.set(id, newUser);
     return newUser;
   }
@@ -461,8 +527,41 @@ export class MemStorage implements IStorage {
     return updatedUser;
   }
 
-  async getAllUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
+  async getAllUsers(organizationId?: number): Promise<User[]> {
+    const users = Array.from(this.users.values());
+    if (organizationId !== undefined) {
+      return users.filter(user => user.organizationId === organizationId);
+    }
+    return users;
+  }
+
+  // Organization management
+  async getOrganization(id: number): Promise<Organization | undefined> {
+    return this.organizations.get(id);
+  }
+
+  async getOrganizationByName(name: string): Promise<Organization | undefined> {
+    return Array.from(this.organizations.values()).find(org => org.name === name);
+  }
+
+  async createOrganization(organization: InsertOrganization): Promise<Organization> {
+    const id = this.organizationId++;
+    const newOrganization: Organization = { 
+      ...organization, 
+      id, 
+      createdAt: new Date(), 
+      isActive: true,
+      description: organization.description || null,
+      contactPhone: organization.contactPhone || null,
+      logoUrl: organization.logoUrl || null,
+      settings: organization.settings || null
+    };
+    this.organizations.set(id, newOrganization);
+    return newOrganization;
+  }
+
+  async getAllOrganizations(): Promise<Organization[]> {
+    return Array.from(this.organizations.values());
   }
   
   // Team management
@@ -477,8 +576,12 @@ export class MemStorage implements IStorage {
     return newTeam;
   }
   
-  async getAllTeams(): Promise<Team[]> {
-    return Array.from(this.teams.values());
+  async getAllTeams(organizationId?: number): Promise<Team[]> {
+    const teams = Array.from(this.teams.values());
+    if (organizationId !== undefined) {
+      return teams.filter(team => team.organizationId === organizationId);
+    }
+    return teams;
   }
 
   // Activity tracking
@@ -507,8 +610,21 @@ export class MemStorage implements IStorage {
       new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
   }
 
-  async getRecentActivities(limit = 10): Promise<Activity[]> {
-    return Array.from(this.activities.values())
+  async getRecentActivities(limit = 10, organizationId?: number): Promise<Activity[]> {
+    let activities = Array.from(this.activities.values());
+    
+    // If an organizationId is provided, filter activities by users in that organization
+    if (organizationId) {
+      // First, get all users in the organization
+      const usersInOrg = Array.from(this.users.values())
+        .filter(user => user.organizationId === organizationId)
+        .map(user => user.id);
+      
+      // Then filter activities by these users
+      activities = activities.filter(activity => usersInOrg.includes(activity.userId));
+    }
+    
+    return activities
       .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
       .slice(0, limit);
   }
@@ -553,8 +669,17 @@ export class MemStorage implements IStorage {
     return newSummary;
   }
 
-  async getTeamSummaries(startDate?: Date, endDate?: Date): Promise<DailySummary[]> {
+  async getTeamSummaries(startDate?: Date, endDate?: Date, organizationId?: number): Promise<DailySummary[]> {
     let summaries = Array.from(this.dailySummaries.values());
+    
+    if (organizationId !== undefined) {
+      // Get users in this organization
+      const orgUsers = await this.getAllUsers(organizationId);
+      const userIds = orgUsers.map(user => user.id);
+      
+      // Filter summaries to only include users in this organization
+      summaries = summaries.filter(summary => userIds.includes(summary.userId));
+    }
     
     if (startDate) {
       const targetStartDate = new Date(startDate);
@@ -574,8 +699,19 @@ export class MemStorage implements IStorage {
   }
 
   // Projects
-  async getProjects(): Promise<Project[]> {
-    return Array.from(this.projects.values());
+  async getProjects(organizationId?: number): Promise<Project[]> {
+    const projects = Array.from(this.projects.values());
+    
+    if (organizationId !== undefined) {
+      // Find all teams in this organization
+      const teams = await this.getAllTeams(organizationId);
+      const teamIds = teams.map(team => team.id);
+      
+      // Return only projects that belong to teams in this organization
+      return projects.filter(project => teamIds.includes(project.teamId));
+    }
+    
+    return projects;
   }
 
   async createProject(project: InsertProject): Promise<Project> {
@@ -675,11 +811,20 @@ export class MemStorage implements IStorage {
   }
   
   // Restricted Applications
-  async getRestrictedApps(teamId?: number): Promise<RestrictedApp[]> {
+  async getRestrictedApps(teamId?: number, organizationId?: number): Promise<RestrictedApp[]> {
     const apps = Array.from(this.restrictedApps.values());
     
-    if (teamId) {
+    if (teamId !== undefined) {
       return apps.filter(app => app.teamId === teamId);
+    }
+    
+    if (organizationId !== undefined) {
+      // Find all teams in this organization
+      const teams = await this.getAllTeams(organizationId);
+      const teamIds = teams.map(team => team.id);
+      
+      // Return only restricted apps that belong to teams in this organization
+      return apps.filter(app => app.teamId === null || teamIds.includes(app.teamId));
     }
     
     return apps;
@@ -697,9 +842,9 @@ export class MemStorage implements IStorage {
   }
 
   // Dashboard metrics
-  async getTeamOverview(): Promise<any> {
-    const users = await this.getAllUsers();
-    const summaries = await this.getTeamSummaries();
+  async getTeamOverview(organizationId?: number): Promise<any> {
+    const users = await this.getAllUsers(organizationId);
+    const summaries = await this.getTeamSummaries(undefined, undefined, organizationId);
     
     // Group summaries by user
     const userSummaries = users.map(user => {
@@ -730,9 +875,9 @@ export class MemStorage implements IStorage {
     return userSummaries;
   }
 
-  async getDashboardMetrics(): Promise<any> {
-    const summaries = await this.getTeamSummaries();
-    const users = await this.getAllUsers();
+  async getDashboardMetrics(organizationId?: number): Promise<any> {
+    const summaries = await this.getTeamSummaries(undefined, undefined, organizationId);
+    const users = await this.getAllUsers(organizationId);
     
     if (summaries.length === 0) {
       return {

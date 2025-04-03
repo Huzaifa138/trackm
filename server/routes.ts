@@ -9,8 +9,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // User routes
   router.get("/users", async (req: Request, res: Response) => {
-    const users = await storage.getAllUsers();
-    res.json(users);
+    try {
+      // Parse organizationId if provided
+      let organizationId: number | undefined;
+      
+      if (req.query.organizationId) {
+        organizationId = parseInt(req.query.organizationId as string);
+        if (isNaN(organizationId)) {
+          return res.status(400).json({ message: "Invalid organization ID" });
+        }
+      }
+      
+      const users = await storage.getAllUsers(organizationId);
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ message: "Internal server error" });
+    }
   });
 
   router.get("/users/:id", async (req: Request, res: Response) => {
@@ -75,7 +89,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   router.get("/activities", async (req: Request, res: Response) => {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
-      const activities = await storage.getRecentActivities(limit);
+      let organizationId: number | undefined;
+      
+      if (req.query.organizationId) {
+        organizationId = parseInt(req.query.organizationId as string);
+        if (isNaN(organizationId)) {
+          return res.status(400).json({ message: "Invalid organization ID" });
+        }
+      }
+      
+      const activities = await storage.getRecentActivities(limit, organizationId);
       res.json(activities);
     } catch (error) {
       res.status(500).json({ message: "Internal server error" });
@@ -195,6 +218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Parse date filters if provided
       let startDate: Date | undefined;
       let endDate: Date | undefined;
+      let organizationId: number | undefined;
       
       if (req.query.startDate) {
         startDate = new Date(req.query.startDate as string);
@@ -204,7 +228,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         endDate = new Date(req.query.endDate as string);
       }
       
-      const summaries = await storage.getTeamSummaries(startDate, endDate);
+      if (req.query.organizationId) {
+        organizationId = parseInt(req.query.organizationId as string);
+        if (isNaN(organizationId)) {
+          return res.status(400).json({ message: "Invalid organization ID" });
+        }
+      }
+      
+      const summaries = await storage.getTeamSummaries(startDate, endDate, organizationId);
       res.json(summaries);
     } catch (error) {
       res.status(500).json({ message: "Internal server error" });
@@ -227,7 +258,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Project routes
   router.get("/projects", async (req: Request, res: Response) => {
     try {
-      const projects = await storage.getProjects();
+      // Parse organizationId if provided
+      let organizationId: number | undefined;
+      
+      if (req.query.organizationId) {
+        organizationId = parseInt(req.query.organizationId as string);
+        if (isNaN(organizationId)) {
+          return res.status(400).json({ message: "Invalid organization ID" });
+        }
+      }
+      
+      const projects = await storage.getProjects(organizationId);
       res.json(projects);
     } catch (error) {
       res.status(500).json({ message: "Internal server error" });
@@ -250,7 +291,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard metrics
   router.get("/dashboard/metrics", async (req: Request, res: Response) => {
     try {
-      const metrics = await storage.getDashboardMetrics();
+      // Parse organizationId if provided
+      let organizationId: number | undefined;
+      
+      if (req.query.organizationId) {
+        organizationId = parseInt(req.query.organizationId as string);
+        if (isNaN(organizationId)) {
+          return res.status(400).json({ message: "Invalid organization ID" });
+        }
+      }
+      
+      const metrics = await storage.getDashboardMetrics(organizationId);
       res.json(metrics);
     } catch (error) {
       res.status(500).json({ message: "Internal server error" });
@@ -259,7 +310,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   router.get("/dashboard/team-overview", async (req: Request, res: Response) => {
     try {
-      const teamOverview = await storage.getTeamOverview();
+      // Parse organizationId if provided
+      let organizationId: number | undefined;
+      
+      if (req.query.organizationId) {
+        organizationId = parseInt(req.query.organizationId as string);
+        if (isNaN(organizationId)) {
+          return res.status(400).json({ message: "Invalid organization ID" });
+        }
+      }
+      
+      const teamOverview = await storage.getTeamOverview(organizationId);
       res.json(teamOverview);
     } catch (error) {
       res.status(500).json({ message: "Internal server error" });
@@ -321,7 +382,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Team management endpoints
   router.get("/teams", async (req: Request, res: Response) => {
     try {
-      const teams = await storage.getAllTeams();
+      // Parse organizationId if provided
+      let organizationId: number | undefined;
+      
+      if (req.query.organizationId) {
+        organizationId = parseInt(req.query.organizationId as string);
+        if (isNaN(organizationId)) {
+          return res.status(400).json({ message: "Invalid organization ID" });
+        }
+      }
+      
+      const teams = await storage.getAllTeams(organizationId);
       res.json(teams);
     } catch (error) {
       console.error("Error fetching teams:", error);
@@ -676,6 +747,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.query.userId ? parseInt(req.query.userId as string) : null;
       const teamId = req.query.teamId ? parseInt(req.query.teamId as string) : undefined;
+      let organizationId: number | undefined;
+      
+      if (req.query.organizationId) {
+        organizationId = parseInt(req.query.organizationId as string);
+        if (isNaN(organizationId)) {
+          return res.status(400).json({ message: "Invalid organization ID" });
+        }
+      }
       
       // If we have a userId but no teamId, try to find the team for this user
       if (userId && !teamId) {
@@ -689,6 +768,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // If we have a teamId, get restricted apps for that team
       if (teamId) {
         const apps = await storage.getRestrictedApps(teamId);
+        return res.json(apps);
+      }
+      
+      // If we have an organizationId, get restricted apps for that organization
+      if (organizationId) {
+        const apps = await storage.getRestrictedApps(undefined, organizationId);
         return res.json(apps);
       }
       
@@ -741,6 +826,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting restricted app:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Desktop Agent Download Endpoints
+  router.get("/agent/download/:platform", async (req: Request, res: Response) => {
+    try {
+      const platform = req.params.platform;
+      
+      if (platform !== 'windows' && platform !== 'macos') {
+        return res.status(400).json({ message: "Invalid platform. Must be 'windows' or 'macos'" });
+      }
+      
+      // In a real application, we would:
+      // 1. Check user authentication and permissions
+      // 2. Generate a customized agent with organizational config
+      // 3. Stream the file to the client
+      
+      // For now, we'll just send a message with instructions
+      if (platform === 'windows') {
+        res.json({ 
+          message: "Windows agent download initiated", 
+          instructions: "In a production environment, this would download the Windows agent installer (.exe or .msi file)"
+        });
+      } else {
+        res.json({ 
+          message: "macOS agent download initiated", 
+          instructions: "In a production environment, this would download the macOS agent package (.pkg or .dmg file)"
+        });
+      }
+    } catch (error) {
+      console.error("Error handling agent download:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  // Organization-specific agent downloads
+  router.get("/agent/download/:platform/:organizationId", async (req: Request, res: Response) => {
+    try {
+      const platform = req.params.platform;
+      const organizationId = parseInt(req.params.organizationId);
+      
+      if (isNaN(organizationId)) {
+        return res.status(400).json({ message: "Invalid organization ID" });
+      }
+      
+      if (platform !== 'windows' && platform !== 'macos') {
+        return res.status(400).json({ message: "Invalid platform. Must be 'windows' or 'macos'" });
+      }
+      
+      // Get the organization to verify it exists and prepare custom configuration
+      const organization = await storage.getOrganization(organizationId);
+      
+      if (!organization) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+      
+      // In a real application, we would:
+      // 1. Generate an organization-specific agent with embedded configuration
+      // 2. Sign the package with appropriate certificates
+      // 3. Stream the file to the client
+      
+      if (platform === 'windows') {
+        res.json({ 
+          message: `Windows agent for organization "${organization.name}" download initiated`, 
+          instructions: "In a production environment, this would download a pre-configured Windows agent installer"
+        });
+      } else {
+        res.json({ 
+          message: `macOS agent for organization "${organization.name}" download initiated`, 
+          instructions: "In a production environment, this would download a pre-configured macOS agent package"
+        });
+      }
+    } catch (error) {
+      console.error("Error handling organization-specific agent download:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
