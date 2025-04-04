@@ -26,7 +26,7 @@ export default function AgentDownload() {
       let url = `/api/agent/download/${platform}`;
       if (orgId) url += `/${orgId}`;
       
-      const response = await apiRequest(url, 'GET') as any;
+      const response = await (await apiRequest('GET', url)).json();
       
       // In a real application, this would trigger an actual download
       // For now we'll just show a toast with the response
