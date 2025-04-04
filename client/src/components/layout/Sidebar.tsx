@@ -15,15 +15,13 @@ function NavItem({ href, icon, label }: NavItemProps) {
   const [isActive] = useRoute(href);
   
   return (
-    <Link href={href}>
-      <a className={`flex items-center py-2 px-4 text-sm ${
-        isActive 
-          ? 'bg-primary/10 text-primary border-l-3 border-primary' 
-          : 'text-neutral-dark hover:bg-gray-100'
-      }`}>
-        <span className="w-5 flex items-center">{icon}</span>
-        <span className="ml-2">{label}</span>
-      </a>
+    <Link href={href} className={`flex items-center py-2 px-4 text-sm ${
+      isActive 
+        ? 'bg-primary/10 text-primary border-l-3 border-primary' 
+        : 'text-neutral-dark hover:bg-gray-100'
+    }`}>
+      <span className="w-5 flex items-center">{icon}</span>
+      <span className="ml-2">{label}</span>
     </Link>
   );
 }

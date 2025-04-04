@@ -665,19 +665,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Agent Configuration
   router.get("/agent-config", async (req: Request, res: Response) => {
     try {
+      // Accept either userId or organizationId for flexibility
       const userId = req.query.userId ? parseInt(req.query.userId as string) : null;
+      let orgId = req.query.organizationId ? parseInt(req.query.organizationId as string) : null;
       
-      if (!userId) {
-        return res.status(400).json({ message: "User ID is required" });
+      if (!userId && !orgId) {
+        return res.status(400).json({ message: "Either User ID or Organization ID is required" });
       }
       
-      // Fetch the agent configuration from storage
-      const config = await storage.getAgentConfig(userId);
+      // If we have a userId, try to get user-specific config first
+      if (userId) {
+        // Fetch the agent configuration from storage
+        const config = await storage.getAgentConfig(userId);
+        
+        if (config) {
+          return res.json(config);
+        }
+        
+        // Try to get the user to determine their organization
+        const user = await storage.getUser(userId);
+        if (user && user.organizationId) {
+          // If we don't already have an organization ID, use the user's
+          if (orgId === null) {
+            orgId = user.organizationId;
+          }
+        } else {
+          // Return a default configuration if we can't find the user's organization
+          return res.json({
+            userId,
+            screenshotFrequency: 5,
+            activityTrackingInterval: 5,
+            idleThreshold: 60,
+            monitorApplications: true,
+            monitorWebsites: true,
+            captureScreenshots: true,
+            privateMode: false,
+            enforceRestrictedApps: true,
+            workingHoursEnabled: true,
+            workingHoursStart: "09:00",
+            workingHoursEnd: "17:00",
+            workingDays: [1, 2, 3, 4, 5],
+            serverUrl: req.protocol + '://' + req.get('host')
+          });
+        }
+      }
       
-      if (!config) {
-        // Return a default configuration if none exists for this user
+      // If we have an organizationId (either directly or from the user), return org-specific config
+      if (orgId) {
+        const organization = await storage.getOrganization(orgId);
+        
+        if (!organization) {
+          return res.status(404).json({ message: "Organization not found" });
+        }
+        
+        // Return an organization-specific configuration
         return res.json({
-          userId,
+          organizationId: orgId,
+          organizationName: organization.name,
           screenshotFrequency: 5,
           activityTrackingInterval: 5,
           idleThreshold: 60,
@@ -689,11 +733,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           workingHoursEnabled: true,
           workingHoursStart: "09:00",
           workingHoursEnd: "17:00",
-          workingDays: [1, 2, 3, 4, 5]
+          workingDays: [1, 2, 3, 4, 5],
+          serverUrl: req.protocol + '://' + req.get('host')
         });
       }
       
-      res.json(config);
+      // This should never happen, but just in case
+      return res.status(500).json({ message: "Unable to determine configuration" });
     } catch (error) {
       console.error("Error fetching agent config:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -839,21 +885,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid platform. Must be 'windows' or 'macos'" });
       }
       
-      // In a real application, we would:
-      // 1. Check user authentication and permissions
-      // 2. Generate a customized agent with organizational config
-      // 3. Stream the file to the client
+      // Default organization for anonymous downloads - use organization ID 1
+      // This enables downloading agents without requiring login
+      const defaultOrganizationId = 1;
+      const organization = await storage.getOrganization(defaultOrganizationId);
       
-      // For now, we'll just send a message with instructions
+      if (!organization) {
+        return res.status(404).json({ message: "Default organization not found" });
+      }
+      
+      // For now, we'll just send a message with instructions, but embed the organization ID
       if (platform === 'windows') {
         res.json({ 
           message: "Windows agent download initiated", 
-          instructions: "In a production environment, this would download the Windows agent installer (.exe or .msi file)"
+          instructions: "In a production environment, this would download the Windows agent installer (.exe or .msi file)",
+          organizationId: organization.id,
+          organizationName: organization.name,
+          configUrl: `/api/agent-config?organizationId=${organization.id}`
         });
       } else {
         res.json({ 
           message: "macOS agent download initiated", 
-          instructions: "In a production environment, this would download the macOS agent package (.pkg or .dmg file)"
+          instructions: "In a production environment, this would download the macOS agent package (.pkg or .dmg file)",
+          organizationId: organization.id,
+          organizationName: organization.name,
+          configUrl: `/api/agent-config?organizationId=${organization.id}`
         });
       }
     } catch (error) {
@@ -883,20 +939,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Organization not found" });
       }
       
-      // In a real application, we would:
-      // 1. Generate an organization-specific agent with embedded configuration
-      // 2. Sign the package with appropriate certificates
-      // 3. Stream the file to the client
+      // In a real environment, we would stream the file to the client,
+      // but for now we'll send a JSON response with download details
       
       if (platform === 'windows') {
         res.json({ 
           message: `Windows agent for organization "${organization.name}" download initiated`, 
-          instructions: "In a production environment, this would download a pre-configured Windows agent installer"
+          instructions: "In a production environment, this would download a pre-configured Windows agent installer",
+          organizationId: organization.id,
+          organizationName: organization.name,
+          configUrl: `/api/agent-config?organizationId=${organization.id}`
         });
       } else {
         res.json({ 
           message: `macOS agent for organization "${organization.name}" download initiated`, 
-          instructions: "In a production environment, this would download a pre-configured macOS agent package"
+          instructions: "In a production environment, this would download a pre-configured macOS agent package",
+          organizationId: organization.id,
+          organizationName: organization.name,
+          configUrl: `/api/agent-config?organizationId=${organization.id}`
         });
       }
     } catch (error) {

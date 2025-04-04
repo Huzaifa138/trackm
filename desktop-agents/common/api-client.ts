@@ -7,17 +7,22 @@ import { ActivityData, AgentConfig, AgentStatus, AlertNotification, ScreenshotDa
 
 export class ApiClient {
   private axiosInstance: AxiosInstance;
-  private userId: number;
+  private userId?: number;
   private teamId?: number;
+  private organizationId?: number;
   
   constructor(
     serverUrl: string,
     apiKey: string,
-    userId: number,
-    teamId?: number
+    options: { 
+      userId?: number;
+      teamId?: number;
+      organizationId?: number;
+    } = {}
   ) {
-    this.userId = userId;
-    this.teamId = teamId;
+    this.userId = options.userId;
+    this.teamId = options.teamId;
+    this.organizationId = options.organizationId;
     
     // Create axios instance with base configuration
     this.axiosInstance = axios.create({
@@ -149,9 +154,19 @@ export class ApiClient {
    */
   async getAgentConfig(): Promise<AgentConfig | null> {
     try {
-      const response = await this.axiosInstance.get('/api/agent-config', {
-        params: { userId: this.userId }
-      });
+      // Prepare params based on what we have available - organization ID takes precedence
+      const params: any = {};
+      
+      if (this.organizationId) {
+        params.organizationId = this.organizationId;
+      } else if (this.userId) {
+        params.userId = this.userId;
+      } else {
+        console.error('No user ID or organization ID available for agent config');
+        return null;
+      }
+      
+      const response = await this.axiosInstance.get('/api/agent-config', { params });
       
       console.log('Agent configuration retrieved successfully');
       return response.data as AgentConfig;
@@ -183,9 +198,18 @@ export class ApiClient {
    */
   async testConnection(): Promise<boolean> {
     try {
+      // Prepare params based on what we have available - organization ID takes precedence
+      const params: any = {};
+      
+      if (this.organizationId) {
+        params.organizationId = this.organizationId;
+      } else if (this.userId) {
+        params.userId = this.userId;
+      }
+      
       // Just hit the agent config endpoint as a ping test
       await this.axiosInstance.get('/api/agent-config', {
-        params: { userId: this.userId },
+        params,
         timeout: 5000 // Shorter timeout for ping test
       });
       
