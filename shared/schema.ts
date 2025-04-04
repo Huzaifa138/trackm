@@ -176,12 +176,21 @@ export const agentConfig = pgTable("agent_config", {
   monitorApplications: boolean("monitor_applications").default(true),
   monitorWebsites: boolean("monitor_websites").default(true),
   captureScreenshots: boolean("capture_screenshots").default(true),
+  captureQuality: text("capture_quality").default("medium"), // low, medium, high
+  privacyProtection: boolean("privacy_protection").default(true), // Masks sensitive data in screenshots
+  dataRetentionDays: integer("data_retention_days").default(90),
+  maskScreenshotsInPrivateApps: boolean("mask_screenshots_in_private_apps").default(true),
   privateMode: boolean("private_mode").default(false),
   enforceRestrictedApps: boolean("enforce_restricted_apps").default(true),
+  detectAnomalies: boolean("detect_anomalies").default(true),
+  trackUSBDevices: boolean("track_usb_devices").default(true),
+  allowOfflineCollection: boolean("allow_offline_collection").default(true),
+  syncIntervalMinutes: integer("sync_interval_minutes").default(15),
   workingHoursEnabled: boolean("working_hours_enabled").default(false),
   workingHoursStart: text("working_hours_start").default("09:00"),
   workingHoursEnd: text("working_hours_end").default("17:00"),
   workingDays: jsonb("working_days").default([1,2,3,4,5]), // array of weekdays
+  customCategories: jsonb("custom_categories").default([]),
 });
 
 export const insertAgentConfigSchema = createInsertSchema(agentConfig).omit({

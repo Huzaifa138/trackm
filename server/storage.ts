@@ -279,12 +279,25 @@ export class MemStorage implements IStorage {
         monitorApplications: true,
         monitorWebsites: true,
         captureScreenshots: true,
+        captureQuality: 'medium', // low, medium, high
+        privacyProtection: true, // Masks sensitive data in screenshots
+        dataRetentionDays: 90,
+        maskScreenshotsInPrivateApps: true,
         privateMode: false,
         enforceRestrictedApps: true,
+        detectAnomalies: true,
+        trackUSBDevices: true,
+        allowOfflineCollection: true,
+        syncIntervalMinutes: 15,
         workingHoursEnabled: true,
         workingHoursStart: '09:00',
         workingHoursEnd: '17:00',
-        workingDays: [1, 2, 3, 4, 5] // Monday-Friday
+        workingDays: [1, 2, 3, 4, 5], // Monday-Friday
+        customCategories: [
+          { name: 'Development', applications: ['Visual Studio Code', 'IntelliJ', 'GitHub Desktop'], websites: ['github.com', 'stackoverflow.com'] },
+          { name: 'Communication', applications: ['Slack', 'Microsoft Teams', 'Zoom'], websites: ['slack.com', 'teams.microsoft.com', 'zoom.us'] },
+          { name: 'Productivity', applications: ['Microsoft Word', 'Excel', 'PowerPoint'], websites: ['office.com', 'docs.google.com'] }
+        ]
       });
     }
     

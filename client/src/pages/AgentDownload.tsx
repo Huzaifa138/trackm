@@ -71,9 +71,9 @@ export default function AgentDownload() {
           </CardHeader>
           <CardContent>
             <p className="text-sm mb-4">
-              The Windows agent monitors activity, captures screenshots (if enabled), and enforces
-              application usage policies. It runs silently in the background and uses minimal
-              system resources.
+              The Windows agent continuously tracks active time, application usage, website visits, 
+              and productivity metrics. It captures screenshots (if enabled), enforces application 
+              usage policies, and runs silently in the background with minimal system resources.
             </p>
             <p className="text-xs text-muted-foreground mb-4">
               System Requirements: Windows 7/8/10/11, 1GB RAM, 50MB free disk space
@@ -101,8 +101,9 @@ export default function AgentDownload() {
           </CardHeader>
           <CardContent>
             <p className="text-sm mb-4">
-              The macOS agent monitors activity, captures screenshots (if enabled), and enforces
-              application usage policies. It's optimized for macOS and respects system privacy settings.
+              The macOS agent continuously tracks active time, application usage, website visits, 
+              and productivity metrics. It captures screenshots (if enabled), enforces application 
+              usage policies, and runs efficiently while respecting macOS privacy settings.
             </p>
             <p className="text-xs text-muted-foreground mb-4">
               System Requirements: macOS 10.12 Sierra or newer, 1GB RAM, 50MB free disk space

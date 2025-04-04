@@ -900,8 +900,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 Configuration URL: /api/agent-config?organizationId=${organization.id}
 
 Compatibility:
-${platform === 'windows' ? '- Windows 7, 8, 10, and 11 supported' : '- macOS 10.12 Sierra and newer versions supported'}
+${platform === 'windows' ? '- Windows 7, 8, 8.1, 10, and 11 supported (32-bit and 64-bit versions)' : '- All macOS versions from 10.12 Sierra to the latest macOS Sonoma supported'}
 - System requirements: 1GB RAM, 50MB disk space
+
+Features:
+- Real-time activity tracking (active applications, websites, and documents)
+- Work hours and productivity classification
+- Idle time detection and exclusion
+- Regular screenshots with customizable interval
+- Application and website category reporting
+- USB device tracking and alerting
+- User behavior anomaly detection
+- Application blocking for restricted applications
+- Privacy protection with data masking options
+- Offline data collection with sync when reconnected
       
 This file would normally be an executable installer.`;
       
@@ -943,8 +955,26 @@ This file would normally be an executable installer.`;
 Configuration URL: /api/agent-config?organizationId=${organization.id}
 
 Compatibility:
-${platform === 'windows' ? '- Windows 7, 8, 10, and 11 supported' : '- macOS 10.12 Sierra and newer versions supported'}
+${platform === 'windows' ? '- Windows 7, 8, 8.1, 10, and 11 supported (32-bit and 64-bit versions)' : '- All macOS versions from 10.12 Sierra to the latest macOS Sonoma supported'}
 - System requirements: 1GB RAM, 50MB disk space
+
+Features:
+- Real-time activity tracking (active applications, websites, and documents)
+- Work hours and productivity classification
+- Idle time detection and exclusion
+- Regular screenshots with customizable interval
+- Application and website category reporting
+- USB device tracking and alerting
+- User behavior anomaly detection
+- Application blocking for restricted applications
+- Privacy protection with data masking options
+- Offline data collection with sync when reconnected
+
+Organization-specific configuration:
+- Pre-configured server endpoint for ${organization.name}
+- Custom screenshot interval settings
+- Organization-specific application categorization
+- Tailored productivity classifications
       
 This file would normally be an executable installer with pre-configured organization settings.`;
       
