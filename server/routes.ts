@@ -894,16 +894,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Default organization not found" });
       }
       
-      // Set headers for file download
-      const fileName = platform === 'windows' ? 'ProductivityMonitor_Setup.exe' : 'ProductivityMonitor.pkg';
-      const fileContent = `This is a simulated ${platform} agent installer for ${organization.name} (ID: ${organization.id}).
+      // Set headers for file download - use ZIP format instead of EXE to avoid Windows security warnings
+      const fileName = platform === 'windows' ? 'ProductivityMonitor_Setup.zip' : 'ProductivityMonitor.zip';
+      const fileContent = `README - ActivTrack Desktop Agent
+
+Platform: ${platform.toUpperCase()}
+Organization: ${organization.name} (ID: ${organization.id})
 Configuration URL: /api/agent-config?organizationId=${organization.id}
 
-Compatibility:
+INSTALLATION INSTRUCTIONS
+------------------------
+${platform === 'windows' ? 
+'1. Extract all files from this ZIP archive\n2. Right-click on "ActivTrack_Setup.exe" and select "Run as administrator"\n3. Follow the on-screen installation wizard\n4. The agent will start automatically after installation' : 
+'1. Extract all files from this ZIP archive\n2. Double-click on "ActivTrack.pkg"\n3. Follow the on-screen installation wizard\n4. Grant the required permissions when prompted\n5. The agent will start automatically after installation'}
+
+COMPATIBILITY
+------------------------
 ${platform === 'windows' ? '- Windows 7, 8, 8.1, 10, and 11 supported (32-bit and 64-bit versions)' : '- All macOS versions from 10.12 Sierra to the latest macOS Sonoma supported'}
 - System requirements: 1GB RAM, 50MB disk space
 
-Features:
+FEATURES
+------------------------
 - Real-time activity tracking (active applications, websites, and documents)
 - Work hours and productivity classification
 - Idle time detection and exclusion
@@ -914,11 +925,12 @@ Features:
 - Application blocking for restricted applications
 - Privacy protection with data masking options
 - Offline data collection with sync when reconnected
-      
-This file would normally be an executable installer.`;
+
+NOTE: This is a simulated agent installer package for demonstration purposes.
+In a production environment, this would contain the actual agent software.`;
       
       res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
-      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Length', fileContent.length);
       
       return res.send(fileContent);
@@ -949,16 +961,27 @@ This file would normally be an executable installer.`;
         return res.status(404).json({ message: "Organization not found" });
       }
       
-      // Set headers for file download
-      const fileName = platform === 'windows' ? `ProductivityMonitor_${organization.name}_Setup.exe` : `ProductivityMonitor_${organization.name}.pkg`;
-      const fileContent = `This is a simulated ${platform} agent installer for ${organization.name} (ID: ${organization.id}).
+      // Set headers for file download - use ZIP format instead of EXE to avoid Windows security warnings
+      const fileName = platform === 'windows' ? `ActivTrack_${organization.name}_Setup.zip` : `ActivTrack_${organization.name}.zip`;
+      const fileContent = `README - ActivTrack Desktop Agent
+
+Platform: ${platform.toUpperCase()}
+Organization: ${organization.name} (ID: ${organization.id})
 Configuration URL: /api/agent-config?organizationId=${organization.id}
 
-Compatibility:
+INSTALLATION INSTRUCTIONS
+------------------------
+${platform === 'windows' ? 
+'1. Extract all files from this ZIP archive\n2. Right-click on "ActivTrack_Setup.exe" and select "Run as administrator"\n3. Follow the on-screen installation wizard\n4. The agent will start automatically after installation' : 
+'1. Extract all files from this ZIP archive\n2. Double-click on "ActivTrack.pkg"\n3. Follow the on-screen installation wizard\n4. Grant the required permissions when prompted\n5. The agent will start automatically after installation'}
+
+COMPATIBILITY
+------------------------
 ${platform === 'windows' ? '- Windows 7, 8, 8.1, 10, and 11 supported (32-bit and 64-bit versions)' : '- All macOS versions from 10.12 Sierra to the latest macOS Sonoma supported'}
 - System requirements: 1GB RAM, 50MB disk space
 
-Features:
+FEATURES
+------------------------
 - Real-time activity tracking (active applications, websites, and documents)
 - Work hours and productivity classification
 - Idle time detection and exclusion
@@ -970,16 +993,18 @@ Features:
 - Privacy protection with data masking options
 - Offline data collection with sync when reconnected
 
-Organization-specific configuration:
+ORGANIZATION-SPECIFIC CONFIGURATION
+------------------------
 - Pre-configured server endpoint for ${organization.name}
 - Custom screenshot interval settings
 - Organization-specific application categorization
 - Tailored productivity classifications
-      
-This file would normally be an executable installer with pre-configured organization settings.`;
+
+NOTE: This is a simulated agent installer package for demonstration purposes.
+In a production environment, this would contain the actual agent software.`;
       
       res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
-      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Length', fileContent.length);
       
       return res.send(fileContent);

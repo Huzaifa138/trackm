@@ -29,7 +29,7 @@ export default function AgentDownload() {
       // Create a download link for the file
       const downloadLink = document.createElement('a');
       downloadLink.href = url;
-      downloadLink.setAttribute('download', platform === 'windows' ? 'ProductivityMonitor_Setup.exe' : 'ProductivityMonitor.pkg');
+      downloadLink.setAttribute('download', platform === 'windows' ? 'ActivTrack_Windows_Setup.zip' : 'ActivTrack_macOS.zip');
       downloadLink.style.display = 'none';
       
       // Add to DOM, click, and remove
@@ -39,7 +39,7 @@ export default function AgentDownload() {
       
       toast({
         title: "Download Started",
-        description: `${platform === 'windows' ? 'Windows' : 'macOS'} agent download has started.`,
+        description: `${platform === 'windows' ? 'Windows' : 'macOS'} agent download has started. Extract the ZIP file after downloading.`,
         variant: "default",
       });
       
@@ -204,8 +204,9 @@ export default function AgentDownload() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2">
-                <li>Download the agent installer from the button above</li>
-                <li>Right-click the downloaded .exe file and select "Run as administrator"</li>
+                <li>Download the agent ZIP file from the button above</li>
+                <li>Extract the ZIP file to a location on your computer</li>
+                <li>Right-click the extracted "ActivTrack_Setup.exe" file and select "Run as administrator"</li>
                 <li>Follow the on-screen installation instructions</li>
                 <li>When prompted, enter your credentials (the same ones you use to log in)</li>
                 <li>The agent will start automatically after installation</li>
@@ -219,8 +220,9 @@ export default function AgentDownload() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2">
-                <li>Download the agent installer from the button above</li>
-                <li>Open the downloaded .pkg file</li>
+                <li>Download the agent ZIP file from the button above</li>
+                <li>Extract the ZIP file to a location on your computer</li>
+                <li>Double-click the extracted "ActivTrack.pkg" file</li>
                 <li>Follow the on-screen installation instructions</li>
                 <li>You may need to grant permissions in System Preferences</li>
                 <li>When prompted, enter your credentials (the same ones you use to log in)</li>
