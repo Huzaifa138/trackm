@@ -1,8 +1,59 @@
-import express, { type Express, Request, Response } from "express";
+import express, { type Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { insertUserSchema, insertActivitySchema, insertApplicationSchema, insertWebsiteSchema, insertDailySummarySchema, insertProjectSchema } from "@shared/schema";
 import { z } from "zod";
+
+// Map to store active WebSocket connections by user ID and organization ID
+type WebSocketConnections = {
+  byUserId: Map<number, WebSocket[]>;
+  byOrganizationId: Map<number, WebSocket[]>;
+  byTeamId: Map<number, WebSocket[]>;
+};
+
+// Global WebSocket connections map
+const wsConnections: WebSocketConnections = {
+  byUserId: new Map(),
+  byOrganizationId: new Map(),
+  byTeamId: new Map()
+};
+
+// Helper to broadcast messages to all connected clients in an organization
+export function broadcastToOrganization(organizationId: number, event: string, data: any): void {
+  const connections = wsConnections.byOrganizationId.get(organizationId) || [];
+  const message = JSON.stringify({ event, data });
+  
+  connections.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+// Helper to broadcast messages to all connected clients in a team
+export function broadcastToTeam(teamId: number, event: string, data: any): void {
+  const connections = wsConnections.byTeamId.get(teamId) || [];
+  const message = JSON.stringify({ event, data });
+  
+  connections.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+// Helper to send messages to a specific user
+export function sendToUser(userId: number, event: string, data: any): void {
+  const connections = wsConnections.byUserId.get(userId) || [];
+  const message = JSON.stringify({ event, data });
+  
+  connections.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const router = express.Router();
@@ -1018,5 +1069,202 @@ In a production environment, this would contain the actual agent software.`;
   app.use("/api", router);
   
   const httpServer = createServer(app);
+
+  // Setup WebSocket server on a distinct path
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+
+  // WebSocket connection handler
+  wss.on('connection', (ws: WebSocket, req) => {
+    console.log('WebSocket client connected');
+    
+    // Extract connection parameters from URL query
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const userId = parseInt(url.searchParams.get('userId') || '0');
+    const organizationId = parseInt(url.searchParams.get('organizationId') || '0');
+    const teamId = parseInt(url.searchParams.get('teamId') || '0');
+    
+    // Store connection references for real-time messaging
+    if (userId > 0) {
+      if (!wsConnections.byUserId.has(userId)) {
+        wsConnections.byUserId.set(userId, []);
+      }
+      wsConnections.byUserId.get(userId)?.push(ws);
+    }
+    
+    if (organizationId > 0) {
+      if (!wsConnections.byOrganizationId.has(organizationId)) {
+        wsConnections.byOrganizationId.set(organizationId, []);
+      }
+      wsConnections.byOrganizationId.get(organizationId)?.push(ws);
+    }
+    
+    if (teamId > 0) {
+      if (!wsConnections.byTeamId.has(teamId)) {
+        wsConnections.byTeamId.set(teamId, []);
+      }
+      wsConnections.byTeamId.get(teamId)?.push(ws);
+    }
+
+    // Ping-pong to keep connection alive
+    const pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.ping();
+      }
+    }, 30000);
+    
+    // Handle incoming messages
+    ws.on('message', async (message: string) => {
+      try {
+        const data = JSON.parse(message);
+        
+        // Handle real-time events from desktop agents
+        if (data.event === 'activity_update' && data.userId) {
+          // Create activity record
+          if (data.activity) {
+            const activity = await storage.createActivity({
+              userId: data.userId,
+              application: data.activity.application,
+              title: data.activity.title || null,
+              website: data.activity.website || null,
+              duration: data.activity.duration || 0,
+              startTime: new Date(data.activity.startTime),
+              endTime: new Date(data.activity.endTime),
+              isActive: data.activity.isActive || true,
+              teamId: data.teamId || null,
+              category: data.activity.category || null
+            });
+            
+            // Broadcast to relevant team/organization
+            if (teamId) {
+              broadcastToTeam(teamId, 'new_activity', activity);
+            }
+            if (organizationId) {
+              broadcastToOrganization(organizationId, 'new_activity', activity);
+            }
+          }
+        }
+        
+        // Handle screenshot events
+        if (data.event === 'screenshot' && data.userId) {
+          // Create screenshot record
+          if (data.screenshot) {
+            const screenshot = await storage.createScreenshot({
+              userId: data.userId,
+              timestamp: new Date(data.screenshot.timestamp),
+              imageData: data.screenshot.imageData,
+              title: data.screenshot.title || null,
+              application: data.screenshot.application || null,
+              website: data.screenshot.website || null,
+              teamId: data.teamId || null
+            });
+            
+            // Broadcast to relevant team/organization
+            if (teamId) {
+              broadcastToTeam(teamId, 'new_screenshot', screenshot);
+            }
+            if (organizationId) {
+              broadcastToOrganization(organizationId, 'new_screenshot', screenshot);
+            }
+          }
+        }
+        
+        // Handle alert events
+        if (data.event === 'alert' && data.userId) {
+          // Create alert record
+          if (data.alert) {
+            const alert = await storage.createAlert({
+              userId: data.userId,
+              message: data.alert.message,
+              application: data.alert.application,
+              website: data.alert.website || null,
+              timestamp: new Date(data.alert.timestamp),
+              actionTaken: data.alert.actionTaken,
+              title: data.alert.title || null,
+              teamId: data.teamId || null
+            });
+            
+            // Broadcast to relevant team/organization
+            if (teamId) {
+              broadcastToTeam(teamId, 'new_alert', alert);
+            }
+            if (organizationId) {
+              broadcastToOrganization(organizationId, 'new_alert', alert);
+            }
+          }
+        }
+        
+        // Handle agent status updates
+        if (data.event === 'agent_status' && data.userId) {
+          // Create agent status record
+          if (data.status) {
+            const agentStatus = await storage.createAgentStatus({
+              userId: data.userId,
+              version: data.status.version,
+              platform: data.status.platform,
+              timestamp: new Date(data.status.timestamp),
+              isRunning: data.status.isRunning,
+              isConnected: data.status.isConnected,
+              lastActivityTime: new Date(data.status.lastActivityTime),
+              cpuUsage: data.status.cpuUsage || null,
+              memoryUsage: data.status.memoryUsage || null,
+              diskSpace: data.status.diskSpace || null,
+              teamId: data.teamId || null
+            });
+            
+            // Broadcast to relevant team/organization
+            if (teamId) {
+              broadcastToTeam(teamId, 'agent_status_update', agentStatus);
+            }
+            if (organizationId) {
+              broadcastToOrganization(organizationId, 'agent_status_update', agentStatus);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+      }
+    });
+    
+    // Handle disconnection
+    ws.on('close', () => {
+      console.log('WebSocket client disconnected');
+      clearInterval(pingInterval);
+      
+      // Remove connection references
+      if (userId > 0 && wsConnections.byUserId.has(userId)) {
+        const connections = wsConnections.byUserId.get(userId) || [];
+        const index = connections.indexOf(ws);
+        if (index !== -1) {
+          connections.splice(index, 1);
+        }
+        if (connections.length === 0) {
+          wsConnections.byUserId.delete(userId);
+        }
+      }
+      
+      if (organizationId > 0 && wsConnections.byOrganizationId.has(organizationId)) {
+        const connections = wsConnections.byOrganizationId.get(organizationId) || [];
+        const index = connections.indexOf(ws);
+        if (index !== -1) {
+          connections.splice(index, 1);
+        }
+        if (connections.length === 0) {
+          wsConnections.byOrganizationId.delete(organizationId);
+        }
+      }
+      
+      if (teamId > 0 && wsConnections.byTeamId.has(teamId)) {
+        const connections = wsConnections.byTeamId.get(teamId) || [];
+        const index = connections.indexOf(ws);
+        if (index !== -1) {
+          connections.splice(index, 1);
+        }
+        if (connections.length === 0) {
+          wsConnections.byTeamId.delete(teamId);
+        }
+      }
+    });
+  });
+
   return httpServer;
 }
