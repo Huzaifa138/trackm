@@ -14,6 +14,7 @@ import TeamEfficiency from "@/pages/TeamEfficiency";
 import Settings from "@/pages/Settings";
 import UserManagement from "@/pages/UserManagement";
 import ExportData from "@/pages/ExportData";
+import AgentDownload from "@/pages/AgentDownload";
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import MobileSidebar from "@/components/layout/MobileSidebar";
@@ -39,6 +40,7 @@ function Router() {
             <Route path="/settings" component={Settings} />
             <Route path="/user-management" component={UserManagement} />
             <Route path="/export-data" component={ExportData} />
+            <Route path="/agent-download" component={AgentDownload} />
             <Route component={NotFound} />
           </Switch>
         </div>

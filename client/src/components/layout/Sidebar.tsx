@@ -1,7 +1,8 @@
 import { Link, useRoute } from "wouter";
 import { 
   LayoutDashboard, Users, ChartBarStacked, Laptop, Globe, 
-  GitBranch, Clock, Watch, Settings, Shield, Download 
+  GitBranch, Clock, Watch, Settings, Shield, Download, 
+  MonitorDown
 } from "lucide-react";
 
 interface NavItemProps {
@@ -53,6 +54,7 @@ export default function Sidebar() {
         <NavItem href="/settings" icon={<Settings size={16} />} label="Settings" />
         <NavItem href="/user-management" icon={<Shield size={16} />} label="User Management" />
         <NavItem href="/export-data" icon={<Download size={16} />} label="Export Data" />
+        <NavItem href="/agent-download" icon={<MonitorDown size={16} />} label="Agent Download" />
       </nav>
     </aside>
   );

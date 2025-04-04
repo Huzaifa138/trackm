@@ -1,5 +1,5 @@
 import { Link, useRoute } from "wouter";
-import { LayoutDashboard, Users, ChartBarStacked, Settings } from "lucide-react";
+import { LayoutDashboard, Users, ChartBarStacked, Settings, MonitorDown } from "lucide-react";
 
 interface MobileNavItemProps {
   href: string;
@@ -39,6 +39,11 @@ export default function MobileSidebar() {
         href="/activity" 
         icon={<ChartBarStacked size={16} />} 
         label="Activity" 
+      />
+      <MobileNavItem 
+        href="/agent-download" 
+        icon={<MonitorDown size={16} />} 
+        label="Agents" 
       />
       <MobileNavItem 
         href="/settings" 
