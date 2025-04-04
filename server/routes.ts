@@ -898,6 +898,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fileName = platform === 'windows' ? 'ProductivityMonitor_Setup.exe' : 'ProductivityMonitor.pkg';
       const fileContent = `This is a simulated ${platform} agent installer for ${organization.name} (ID: ${organization.id}).
 Configuration URL: /api/agent-config?organizationId=${organization.id}
+
+Compatibility:
+${platform === 'windows' ? '- Windows 7, 8, 10, and 11 supported' : '- macOS 10.12 Sierra and newer versions supported'}
+- System requirements: 1GB RAM, 50MB disk space
       
 This file would normally be an executable installer.`;
       
@@ -937,6 +941,10 @@ This file would normally be an executable installer.`;
       const fileName = platform === 'windows' ? `ProductivityMonitor_${organization.name}_Setup.exe` : `ProductivityMonitor_${organization.name}.pkg`;
       const fileContent = `This is a simulated ${platform} agent installer for ${organization.name} (ID: ${organization.id}).
 Configuration URL: /api/agent-config?organizationId=${organization.id}
+
+Compatibility:
+${platform === 'windows' ? '- Windows 7, 8, 10, and 11 supported' : '- macOS 10.12 Sierra and newer versions supported'}
+- System requirements: 1GB RAM, 50MB disk space
       
 This file would normally be an executable installer with pre-configured organization settings.`;
       

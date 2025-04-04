@@ -66,7 +66,7 @@ export default function AgentDownload() {
               <FaWindows className="mr-2 h-6 w-6" /> Windows Agent
             </CardTitle>
             <CardDescription>
-              Download the agent for Windows computers (Windows 10 and above)
+              Download the agent for Windows computers (Windows 7, 8, 10, 11)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -76,7 +76,7 @@ export default function AgentDownload() {
               system resources.
             </p>
             <p className="text-xs text-muted-foreground mb-4">
-              System Requirements: Windows 10 or above, 2GB RAM, 100MB free disk space
+              System Requirements: Windows 7/8/10/11, 1GB RAM, 50MB free disk space
             </p>
           </CardContent>
           <CardFooter>
@@ -96,7 +96,7 @@ export default function AgentDownload() {
               <FaApple className="mr-2 h-6 w-6" /> macOS Agent
             </CardTitle>
             <CardDescription>
-              Download the agent for Mac computers (macOS 10.15 Catalina and above)
+              Download the agent for Mac computers (macOS 10.12 Sierra and newer)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -105,7 +105,7 @@ export default function AgentDownload() {
               application usage policies. It's optimized for macOS and respects system privacy settings.
             </p>
             <p className="text-xs text-muted-foreground mb-4">
-              System Requirements: macOS 10.15 Catalina or above, 2GB RAM, 100MB free disk space
+              System Requirements: macOS 10.12 Sierra or newer, 1GB RAM, 50MB free disk space
             </p>
           </CardContent>
           <CardFooter>
