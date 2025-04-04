@@ -894,24 +894,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Default organization not found" });
       }
       
-      // For now, we'll just send a message with instructions, but embed the organization ID
-      if (platform === 'windows') {
-        res.json({ 
-          message: "Windows agent download initiated", 
-          instructions: "In a production environment, this would download the Windows agent installer (.exe or .msi file)",
-          organizationId: organization.id,
-          organizationName: organization.name,
-          configUrl: `/api/agent-config?organizationId=${organization.id}`
-        });
-      } else {
-        res.json({ 
-          message: "macOS agent download initiated", 
-          instructions: "In a production environment, this would download the macOS agent package (.pkg or .dmg file)",
-          organizationId: organization.id,
-          organizationName: organization.name,
-          configUrl: `/api/agent-config?organizationId=${organization.id}`
-        });
-      }
+      // Set headers for file download
+      const fileName = platform === 'windows' ? 'ProductivityMonitor_Setup.exe' : 'ProductivityMonitor.pkg';
+      const fileContent = `This is a simulated ${platform} agent installer for ${organization.name} (ID: ${organization.id}).
+Configuration URL: /api/agent-config?organizationId=${organization.id}
+      
+This file would normally be an executable installer.`;
+      
+      res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Length', fileContent.length);
+      
+      return res.send(fileContent);
     } catch (error) {
       console.error("Error handling agent download:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -939,26 +933,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Organization not found" });
       }
       
-      // In a real environment, we would stream the file to the client,
-      // but for now we'll send a JSON response with download details
+      // Set headers for file download
+      const fileName = platform === 'windows' ? `ProductivityMonitor_${organization.name}_Setup.exe` : `ProductivityMonitor_${organization.name}.pkg`;
+      const fileContent = `This is a simulated ${platform} agent installer for ${organization.name} (ID: ${organization.id}).
+Configuration URL: /api/agent-config?organizationId=${organization.id}
       
-      if (platform === 'windows') {
-        res.json({ 
-          message: `Windows agent for organization "${organization.name}" download initiated`, 
-          instructions: "In a production environment, this would download a pre-configured Windows agent installer",
-          organizationId: organization.id,
-          organizationName: organization.name,
-          configUrl: `/api/agent-config?organizationId=${organization.id}`
-        });
-      } else {
-        res.json({ 
-          message: `macOS agent for organization "${organization.name}" download initiated`, 
-          instructions: "In a production environment, this would download a pre-configured macOS agent package",
-          organizationId: organization.id,
-          organizationName: organization.name,
-          configUrl: `/api/agent-config?organizationId=${organization.id}`
-        });
-      }
+This file would normally be an executable installer with pre-configured organization settings.`;
+      
+      res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Length', fileContent.length);
+      
+      return res.send(fileContent);
     } catch (error) {
       console.error("Error handling organization-specific agent download:", error);
       res.status(500).json({ message: "Internal server error" });

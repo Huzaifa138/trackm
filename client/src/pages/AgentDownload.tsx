@@ -26,25 +26,30 @@ export default function AgentDownload() {
       let url = `/api/agent/download/${platform}`;
       if (orgId) url += `/${orgId}`;
       
-      const response = await (await apiRequest('GET', url)).json();
+      // Create a download link for the file
+      const downloadLink = document.createElement('a');
+      downloadLink.href = url;
+      downloadLink.setAttribute('download', platform === 'windows' ? 'ProductivityMonitor_Setup.exe' : 'ProductivityMonitor.pkg');
+      downloadLink.style.display = 'none';
       
-      // In a real application, this would trigger an actual download
-      // For now we'll just show a toast with the response
+      // Add to DOM, click, and remove
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      
       toast({
-        title: "Download Initiated",
-        description: response.message || "Agent download started.",
+        title: "Download Started",
+        description: `${platform === 'windows' ? 'Windows' : 'macOS'} agent download has started.`,
+        variant: "default",
       });
       
-      // In a real implementation, we would:
-      // 1. Trigger the actual file download
-      // 2. Track the download in analytics
-      // 3. Potentially show installation instructions
     } catch (error) {
       toast({
         title: "Download Failed",
         description: "There was an error downloading the agent. Please try again.",
         variant: "destructive",
       });
+      console.error("Download error:", error);
     } finally {
       setDownloading(false);
     }
