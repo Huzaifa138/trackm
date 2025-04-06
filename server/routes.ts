@@ -945,10 +945,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Default organization not found" });
       }
       
-      // Set headers for file download - use ZIP format instead of EXE to avoid Windows security warnings
+      // Set headers for file download - now using executable formats for better user experience
       const fileName = platform === 'python' 
-        ? 'ActivTrack_Python_Agent.zip' 
-        : (platform === 'windows' ? 'ProductivityMonitor_Setup.zip' : 'ProductivityMonitor.zip');
+        ? 'ActivTrack_Python_Agent.exe' 
+        : (platform === 'windows' ? 'ActivTrack_Windows_Setup.exe' : 'ActivTrack_macOS.pkg');
       
       // If Python agent is requested, use different content
       let fileContent = '';
@@ -962,21 +962,18 @@ Configuration URL: /api/agent-config?organizationId=${organization.id}
 
 INSTALLATION INSTRUCTIONS
 ------------------------
-1. Extract all files from this ZIP archive
-2. Make sure Python 3.6+ is installed on your system
-3. Install required dependencies: 
-   pip install -r requirements.txt
-4. Run the installation script:
-   python install.py
-5. Follow the on-screen prompts to configure the agent
-6. The agent will start automatically after installation
+1. Run the ActivTrack_Python_Agent.exe executable file
+2. The installer will automatically verify Python 3.6+ installation
+3. Required dependencies will be installed automatically
+4. Follow the on-screen prompts to configure the agent
+5. The agent will start automatically after installation
 
 COMPATIBILITY
 ------------------------
 - Windows 7, 8, 8.1, 10, and 11
 - All macOS versions from 10.12 Sierra to the latest macOS
 - Ubuntu, Debian, Fedora, RHEL and other major Linux distributions
-- System requirements: Python 3.6 or higher, 1GB RAM, 50MB disk space
+- System requirements: Python 3.6 or higher, 512MB RAM, 20MB disk space
 
 FEATURES
 ------------------------
@@ -1003,8 +1000,8 @@ Configuration URL: /api/agent-config?organizationId=${organization.id}
 INSTALLATION INSTRUCTIONS
 ------------------------
 ${platform === 'windows' ? 
-'1. Extract all files from this ZIP archive\n2. Right-click on "ActivTrack_Setup.exe" and select "Run as administrator"\n3. Follow the on-screen installation wizard\n4. The agent will start automatically after installation' : 
-'1. Extract all files from this ZIP archive\n2. Double-click on "ActivTrack.pkg"\n3. Follow the on-screen installation wizard\n4. Grant the required permissions when prompted\n5. The agent will start automatically after installation'}
+'1. Run the ActivTrack_Windows_Setup.exe file\n2. If prompted by Windows security, click "More info" and "Run anyway"\n3. Follow the on-screen installation wizard\n4. The agent will start automatically after installation' : 
+'1. Open the ActivTrack_macOS.pkg file\n2. Follow the on-screen installation wizard\n3. Grant the required permissions when prompted\n4. The agent will start automatically after installation'}
 
 COMPATIBILITY
 ------------------------
@@ -1029,7 +1026,9 @@ FEATURES
 In a production environment, this would contain the actual agent software.`;
       
       res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
-      res.setHeader('Content-Type', 'application/zip');
+      // Set appropriate content type based on file extension
+      const contentType = platform === 'macos' ? 'application/x-newton-compatible-pkg' : 'application/octet-stream';
+      res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Length', fileContent.length);
       
       return res.send(fileContent);
@@ -1060,10 +1059,10 @@ In a production environment, this would contain the actual agent software.`;
         return res.status(404).json({ message: "Organization not found" });
       }
       
-      // Set headers for file download - use ZIP format instead of EXE to avoid Windows security warnings
+      // Set headers for file download - now using executable formats for better user experience
       const fileName = platform === 'python'
-        ? `ActivTrack_Python_${organization.name}_Agent.zip`
-        : (platform === 'windows' ? `ActivTrack_${organization.name}_Setup.zip` : `ActivTrack_${organization.name}.zip`);
+        ? `ActivTrack_Python_${organization.name}_Agent.exe`
+        : (platform === 'windows' ? `ActivTrack_${organization.name}_Setup.exe` : `ActivTrack_${organization.name}.pkg`);
       
       // If Python agent is requested, use different content
       let fileContent = '';
@@ -1077,14 +1076,11 @@ Configuration URL: /api/agent-config?organizationId=${organization.id}
 
 INSTALLATION INSTRUCTIONS
 ------------------------
-1. Extract all files from this ZIP archive
-2. Make sure Python 3.6+ is installed on your system
-3. Install required dependencies: 
-   pip install -r requirements.txt
-4. Run the installation script:
-   python install.py
-5. Follow the on-screen prompts to configure the agent
-6. The agent will start automatically after installation
+1. Run the ActivTrack_Python_Agent.exe executable file
+2. The installer will automatically verify Python 3.6+ installation
+3. Required dependencies will be installed automatically
+4. Follow the on-screen prompts to configure the agent
+5. The agent will start automatically after installation
 
 COMPATIBILITY
 ------------------------
@@ -1123,8 +1119,8 @@ Configuration URL: /api/agent-config?organizationId=${organization.id}
 INSTALLATION INSTRUCTIONS
 ------------------------
 ${platform === 'windows' ? 
-'1. Extract all files from this ZIP archive\n2. Right-click on "ActivTrack_Setup.exe" and select "Run as administrator"\n3. Follow the on-screen installation wizard\n4. The agent will start automatically after installation' : 
-'1. Extract all files from this ZIP archive\n2. Double-click on "ActivTrack.pkg"\n3. Follow the on-screen installation wizard\n4. Grant the required permissions when prompted\n5. The agent will start automatically after installation'}
+'1. Run the ActivTrack_Windows_Setup.exe file\n2. If prompted by Windows security, click "More info" and "Run anyway"\n3. Follow the on-screen installation wizard\n4. The agent will start automatically after installation' : 
+'1. Open the ActivTrack_macOS.pkg file\n2. Follow the on-screen installation wizard\n3. Grant the required permissions when prompted\n4. The agent will start automatically after installation'}
 
 COMPATIBILITY
 ------------------------
@@ -1156,7 +1152,9 @@ ORGANIZATION-SPECIFIC CONFIGURATION
 In a production environment, this would contain the actual agent software.`;
       
       res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
-      res.setHeader('Content-Type', 'application/zip');
+      // Set appropriate content type based on file extension
+      const contentType = platform === 'macos' ? 'application/x-newton-compatible-pkg' : 'application/octet-stream';
+      res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Length', fileContent.length);
       
       return res.send(fileContent);

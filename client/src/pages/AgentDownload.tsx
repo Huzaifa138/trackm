@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FaWindows, FaApple } from 'react-icons/fa';
+import { FaWindows, FaApple, FaPython } from 'react-icons/fa';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function AgentDownload() {
@@ -20,6 +20,32 @@ export default function AgentDownload() {
     enabled: user?.role === 'admin'
   });
 
+  const getDownloadFilename = (platform: string) => {
+    switch (platform) {
+      case 'windows':
+        return 'ActivTrack_Windows_Setup.exe';
+      case 'macos':
+        return 'ActivTrack_macOS.pkg';
+      case 'python':
+        return 'ActivTrack_Python_Agent.exe';
+      default:
+        return 'ActivTrack_Agent.exe';
+    }
+  };
+
+  const getDownloadDescription = (platform: string) => {
+    switch (platform) {
+      case 'windows':
+        return 'Windows agent download has started. Run the executable file after downloading.';
+      case 'macos':
+        return 'macOS agent download has started. Run the package file after downloading.';
+      case 'python':
+        return 'Python agent download has started. Run the executable file after downloading.';
+      default:
+        return 'Agent download has started.';
+    }
+  };
+
   const handleDownload = async (platform: string, orgId?: number) => {
     setDownloading(true);
     try {
@@ -29,7 +55,7 @@ export default function AgentDownload() {
       // Create a download link for the file
       const downloadLink = document.createElement('a');
       downloadLink.href = url;
-      downloadLink.setAttribute('download', platform === 'windows' ? 'ActivTrack_Windows_Setup.zip' : 'ActivTrack_macOS.zip');
+      downloadLink.setAttribute('download', getDownloadFilename(platform));
       downloadLink.style.display = 'none';
       
       // Add to DOM, click, and remove
@@ -39,7 +65,7 @@ export default function AgentDownload() {
       
       toast({
         title: "Download Started",
-        description: `${platform === 'windows' ? 'Windows' : 'macOS'} agent download has started. Extract the ZIP file after downloading.`,
+        description: getDownloadDescription(platform),
         variant: "default",
       });
       
@@ -59,7 +85,7 @@ export default function AgentDownload() {
     <div className="container mx-auto py-6">
       <h1 className="text-3xl font-bold mb-6">Desktop Agent Download</h1>
       
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center">
@@ -119,6 +145,36 @@ export default function AgentDownload() {
             </Button>
           </CardFooter>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <FaPython className="mr-2 h-6 w-6" /> Python Agent
+            </CardTitle>
+            <CardDescription>
+              Download the cross-platform Python agent (Windows, macOS, Linux)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm mb-4">
+              The Python agent is a lightweight, cross-platform solution that monitors application 
+              usage, tracks productivity, and connects to the server via WebSocket for real-time updates. 
+              Ideal for organizations with mixed environments or custom deployment needs.
+            </p>
+            <p className="text-xs text-muted-foreground mb-4">
+              System Requirements: Python 3.6+, 512MB RAM, 20MB free disk space
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Button 
+              onClick={() => handleDownload('python', organizationId || undefined)} 
+              disabled={downloading}
+              className="w-full"
+            >
+              {downloading ? 'Downloading...' : 'Download Python Agent'}
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
 
       {user?.role === 'admin' && organizations && (
@@ -127,9 +183,10 @@ export default function AgentDownload() {
           <p className="mb-6">As an administrator, you can download pre-configured agents for specific organizations.</p>
           
           <Tabs defaultValue="windows" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="windows">Windows</TabsTrigger>
               <TabsTrigger value="macos">macOS</TabsTrigger>
+              <TabsTrigger value="python">Python</TabsTrigger>
             </TabsList>
             
             <TabsContent value="windows" className="mt-4">
@@ -191,22 +248,51 @@ export default function AgentDownload() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            <TabsContent value="python" className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Python Agent by Organization</CardTitle>
+                  <CardDescription>
+                    Download pre-configured Python agents for specific organizations
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4">
+                    {organizations.map((org: any) => (
+                      <div key={org.id} className="flex justify-between items-center border-b pb-2">
+                        <div>
+                          <h3 className="font-semibold">{org.name}</h3>
+                          <p className="text-sm text-muted-foreground">{org.description || 'No description'}</p>
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => handleDownload('python', org.id)}
+                          disabled={downloading}
+                        >
+                          Download
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </div>
       )}
 
       <div className="mt-10">
         <h2 className="text-2xl font-bold mb-4">Installation Instructions</h2>
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle>Windows Installation</CardTitle>
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2">
-                <li>Download the agent ZIP file from the button above</li>
-                <li>Extract the ZIP file to a location on your computer</li>
-                <li>Right-click the extracted "ActivTrack_Setup.exe" file and select "Run as administrator"</li>
+                <li>Download the agent executable file from the button above</li>
+                <li>Right-click the "ActivTrack_Windows_Setup.exe" file and select "Run as administrator"</li>
                 <li>Follow the on-screen installation instructions</li>
                 <li>When prompted, enter your credentials (the same ones you use to log in)</li>
                 <li>The agent will start automatically after installation</li>
@@ -220,13 +306,28 @@ export default function AgentDownload() {
             </CardHeader>
             <CardContent>
               <ol className="list-decimal pl-5 space-y-2">
-                <li>Download the agent ZIP file from the button above</li>
-                <li>Extract the ZIP file to a location on your computer</li>
-                <li>Double-click the extracted "ActivTrack.pkg" file</li>
+                <li>Download the agent package file from the button above</li>
+                <li>Double-click the "ActivTrack_macOS.pkg" file</li>
                 <li>Follow the on-screen installation instructions</li>
                 <li>You may need to grant permissions in System Preferences</li>
                 <li>When prompted, enter your credentials (the same ones you use to log in)</li>
                 <li>The agent will start automatically after installation</li>
+              </ol>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Python Agent Installation</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ol className="list-decimal pl-5 space-y-2">
+                <li>Download the Python agent executable from the button above</li>
+                <li>Run the "ActivTrack_Python_Agent.exe" file</li>
+                <li>The agent will automatically install required dependencies</li>
+                <li>When prompted, enter your organization ID and user credentials</li>
+                <li>The agent will connect to the server via WebSocket for real-time updates</li>
+                <li>A system tray icon will appear when the agent is running</li>
               </ol>
             </CardContent>
           </Card>
