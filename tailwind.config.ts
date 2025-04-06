@@ -36,6 +36,8 @@ export default {
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
+          blue: "hsl(var(--accent-blue))",
+          red: "hsl(var(--accent-red))",
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
@@ -45,11 +47,11 @@ export default {
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         chart: {
-          "1": "hsl(var(--chart-1))",
-          "2": "hsl(var(--chart-2))",
-          "3": "hsl(var(--chart-3))",
-          "4": "hsl(var(--chart-4))",
-          "5": "hsl(var(--chart-5))",
+          "1": "hsl(var(--primary))",
+          "2": "hsl(var(--accent-blue))",
+          "3": "hsl(var(--accent-red))",
+          "4": "hsl(var(--chart-4, 280 100% 50%))",
+          "5": "hsl(var(--chart-5, 250 100% 50%))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
@@ -79,10 +81,52 @@ export default {
             height: "0",
           },
         },
+        "gradient-flow": {
+          "0%, 100%": { 
+            backgroundPosition: "0% 50%",
+            backgroundSize: "200% 200%"
+          },
+          "50%": { 
+            backgroundPosition: "100% 50%",
+            backgroundSize: "200% 200%"
+          },
+        },
+        "pulse-subtle": {
+          "0%, 100%": { 
+            opacity: "1"
+          },
+          "50%": { 
+            opacity: "0.85"
+          },
+        },
+        "scale-in": {
+          "0%": { 
+            transform: "scale(0.95)",
+            opacity: "0" 
+          },
+          "100%": { 
+            transform: "scale(1)",
+            opacity: "1" 
+          },
+        },
+        "slide-up": {
+          "0%": { 
+            transform: "translateY(10px)",
+            opacity: "0" 
+          },
+          "100%": { 
+            transform: "translateY(0)",
+            opacity: "1" 
+          },
+        }
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "gradient-flow": "gradient-flow 6s ease infinite",
+        "pulse-subtle": "pulse-subtle 3s ease-in-out infinite",
+        "scale-in": "scale-in 0.3s ease-out",
+        "slide-up": "slide-up 0.3s ease-out",
       },
     },
   },
