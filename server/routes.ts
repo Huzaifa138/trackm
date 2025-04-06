@@ -932,8 +932,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const platform = req.params.platform;
       
-      if (platform !== 'windows' && platform !== 'macos') {
-        return res.status(400).json({ message: "Invalid platform. Must be 'windows' or 'macos'" });
+      if (platform !== 'windows' && platform !== 'macos' && platform !== 'python') {
+        return res.status(400).json({ message: "Invalid platform. Must be 'windows', 'macos', or 'python'" });
       }
       
       // Default organization for anonymous downloads - use organization ID 1
@@ -946,8 +946,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Set headers for file download - use ZIP format instead of EXE to avoid Windows security warnings
-      const fileName = platform === 'windows' ? 'ProductivityMonitor_Setup.zip' : 'ProductivityMonitor.zip';
-      const fileContent = `README - ActivTrack Desktop Agent
+      const fileName = platform === 'python' 
+        ? 'ActivTrack_Python_Agent.zip' 
+        : (platform === 'windows' ? 'ProductivityMonitor_Setup.zip' : 'ProductivityMonitor.zip');
+      
+      // If Python agent is requested, use different content
+      let fileContent = '';
+      
+      if (platform === 'python') {
+        fileContent = `README - ActivTrack Python Desktop Agent
+
+Platform: Cross-platform (Windows, macOS, Linux)
+Organization: ${organization.name} (ID: ${organization.id})
+Configuration URL: /api/agent-config?organizationId=${organization.id}
+
+INSTALLATION INSTRUCTIONS
+------------------------
+1. Extract all files from this ZIP archive
+2. Make sure Python 3.6+ is installed on your system
+3. Install required dependencies: 
+   pip install -r requirements.txt
+4. Run the installation script:
+   python install.py
+5. Follow the on-screen prompts to configure the agent
+6. The agent will start automatically after installation
+
+COMPATIBILITY
+------------------------
+- Windows 7, 8, 8.1, 10, and 11
+- All macOS versions from 10.12 Sierra to the latest macOS
+- Ubuntu, Debian, Fedora, RHEL and other major Linux distributions
+- System requirements: Python 3.6 or higher, 1GB RAM, 50MB disk space
+
+FEATURES
+------------------------
+- Cross-platform monitoring on Windows, macOS, and Linux
+- Real-time activity tracking of applications and processes
+- Work hours and productivity classification
+- Application restriction enforcement
+- Offline data collection with sync when reconnected
+- WebSocket real-time communication
+- Lightweight CPU and memory footprint
+- Automatic startup integration with the operating system
+- Privacy protection with configurable data collection settings
+
+NOTE: This is a simulated agent installer package for demonstration purposes.
+In a production environment, this would contain the actual Python agent code.`;
+      } else {
+        // Standard agent content for Windows/macOS
+        fileContent = `README - ActivTrack Desktop Agent
 
 Platform: ${platform.toUpperCase()}
 Organization: ${organization.name} (ID: ${organization.id})
@@ -975,9 +1022,10 @@ FEATURES
 - User behavior anomaly detection
 - Application blocking for restricted applications
 - Privacy protection with data masking options
-- Offline data collection with sync when reconnected
-
-NOTE: This is a simulated agent installer package for demonstration purposes.
+- Offline data collection with sync when reconnected`;
+      }
+      
+      fileContent += `\n\nNOTE: This is a simulated agent installer package for demonstration purposes.
 In a production environment, this would contain the actual agent software.`;
       
       res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
@@ -1001,8 +1049,8 @@ In a production environment, this would contain the actual agent software.`;
         return res.status(400).json({ message: "Invalid organization ID" });
       }
       
-      if (platform !== 'windows' && platform !== 'macos') {
-        return res.status(400).json({ message: "Invalid platform. Must be 'windows' or 'macos'" });
+      if (platform !== 'windows' && platform !== 'macos' && platform !== 'python') {
+        return res.status(400).json({ message: "Invalid platform. Must be 'windows', 'macos', or 'python'" });
       }
       
       // Get the organization to verify it exists and prepare custom configuration
@@ -1013,8 +1061,60 @@ In a production environment, this would contain the actual agent software.`;
       }
       
       // Set headers for file download - use ZIP format instead of EXE to avoid Windows security warnings
-      const fileName = platform === 'windows' ? `ActivTrack_${organization.name}_Setup.zip` : `ActivTrack_${organization.name}.zip`;
-      const fileContent = `README - ActivTrack Desktop Agent
+      const fileName = platform === 'python'
+        ? `ActivTrack_Python_${organization.name}_Agent.zip`
+        : (platform === 'windows' ? `ActivTrack_${organization.name}_Setup.zip` : `ActivTrack_${organization.name}.zip`);
+      
+      // If Python agent is requested, use different content
+      let fileContent = '';
+      
+      if (platform === 'python') {
+        fileContent = `README - ActivTrack Python Desktop Agent
+
+Platform: Cross-platform (Windows, macOS, Linux)
+Organization: ${organization.name} (ID: ${organization.id})
+Configuration URL: /api/agent-config?organizationId=${organization.id}
+
+INSTALLATION INSTRUCTIONS
+------------------------
+1. Extract all files from this ZIP archive
+2. Make sure Python 3.6+ is installed on your system
+3. Install required dependencies: 
+   pip install -r requirements.txt
+4. Run the installation script:
+   python install.py
+5. Follow the on-screen prompts to configure the agent
+6. The agent will start automatically after installation
+
+COMPATIBILITY
+------------------------
+- Windows 7, 8, 8.1, 10, and 11
+- All macOS versions from 10.12 Sierra to the latest macOS
+- Ubuntu, Debian, Fedora, RHEL and other major Linux distributions
+- System requirements: Python 3.6 or higher, 1GB RAM, 50MB disk space
+
+FEATURES
+------------------------
+- Cross-platform monitoring on Windows, macOS, and Linux
+- Real-time activity tracking of applications and processes
+- Work hours and productivity classification
+- Application restriction enforcement
+- Offline data collection with sync when reconnected
+- WebSocket real-time communication
+- Lightweight CPU and memory footprint
+- Automatic startup integration with the operating system
+- Privacy protection with configurable data collection settings
+
+ORGANIZATION-SPECIFIC CONFIGURATION
+------------------------
+- Pre-configured server endpoint for ${organization.name}
+- Organization ID: ${organization.id} (pre-configured)
+- Custom data collection interval settings
+- Organization-specific process monitoring rules
+- Tailored productivity classifications`;
+      } else {
+        // Standard agent content for Windows/macOS
+        fileContent = `README - ActivTrack Desktop Agent
 
 Platform: ${platform.toUpperCase()}
 Organization: ${organization.name} (ID: ${organization.id})
@@ -1049,9 +1149,10 @@ ORGANIZATION-SPECIFIC CONFIGURATION
 - Pre-configured server endpoint for ${organization.name}
 - Custom screenshot interval settings
 - Organization-specific application categorization
-- Tailored productivity classifications
-
-NOTE: This is a simulated agent installer package for demonstration purposes.
+- Tailored productivity classifications`;
+      }
+      
+      fileContent += `\n\nNOTE: This is a simulated agent installer package for demonstration purposes.
 In a production environment, this would contain the actual agent software.`;
       
       res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
