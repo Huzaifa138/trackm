@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+# ActivTrack Python Agent Installer
+# This is a simulated installer that would normally be a full executable
+
+import os
+import sys
+import subprocess
+
+print("==================================================")
+print("ActivTrack Python Agent Installer")
+print("==================================================")
+print()
+print(f"Organization: Default Organization (ID: 2)")
+print(f"API Endpoint: http://localhost:5000/api")
+print(f"WebSocket Endpoint: ws://localhost:5000/ws")
+print()
+print("This installer would:")
+print("1. Verify Python 3.6+ is installed")
+print("2. Install required dependencies: psutil, requests, websocket-client")
+print("3. Setup the agent with your organization ID pre-configured")
+print("4. Configure autostart based on your operating system")
+print("5. Start the agent in the background")
+print()
+print("In a production environment, this would be a real executable.")
+print("For this demonstration, we're simulating the installation process.")
+print()
+print("Installation complete! The agent would now be running in the background.")
+print()
+input("Press Enter to exit...")

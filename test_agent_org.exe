@@ -1,0 +1,43 @@
+README - ActivTrack Python Desktop Agent
+
+Platform: Cross-platform (Windows, macOS, Linux)
+Organization: Default Organization (ID: 2)
+Configuration URL: /api/agent-config?organizationId=2
+
+INSTALLATION INSTRUCTIONS
+------------------------
+1. Run the ActivTrack_Python_Agent.exe executable file
+2. The installer will automatically verify Python 3.6+ installation
+3. Required dependencies will be installed automatically
+4. Follow the on-screen prompts to configure the agent
+5. The agent will start automatically after installation
+
+COMPATIBILITY
+------------------------
+- Windows 7, 8, 8.1, 10, and 11
+- All macOS versions from 10.12 Sierra to the latest macOS
+- Ubuntu, Debian, Fedora, RHEL and other major Linux distributions
+- System requirements: Python 3.6 or higher, 1GB RAM, 50MB disk space
+
+FEATURES
+------------------------
+- Cross-platform monitoring on Windows, macOS, and Linux
+- Real-time activity tracking of applications and processes
+- Work hours and productivity classification
+- Application restriction enforcement
+- Offline data collection with sync when reconnected
+- WebSocket real-time communication
+- Lightweight CPU and memory footprint
+- Automatic startup integration with the operating system
+- Privacy protection with configurable data collection settings
+
+ORGANIZATION-SPECIFIC CONFIGURATION
+------------------------
+- Pre-configured server endpoint for Default Organization
+- Organization ID: 2 (pre-configured)
+- Custom data collection interval settings
+- Organization-specific process monitoring rules
+- Tailored productivity classifications
+
+NOTE: This is a simulated agent installer package for demonstration purposes.
+In a production environment, this would contain the actual agent software.

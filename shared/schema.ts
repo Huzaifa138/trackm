@@ -7,7 +7,7 @@ export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
   description: text("description"),
-  contactEmail: text("contact_email").notNull(),
+  contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
   createdAt: timestamp("created_at").defaultNow(),
   settings: jsonb("settings").default({}),

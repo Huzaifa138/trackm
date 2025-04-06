@@ -17,12 +17,33 @@ import threading
 import queue
 import datetime
 import getpass
+import re
+import uuid
+import argparse
+import socket
 from pathlib import Path
 from typing import Dict, List, Set, Any, Optional
+from urllib.parse import urlparse, parse_qs
 
-import psutil
-import requests
-import websocket
+try:
+    import psutil
+    import requests
+    import websocket
+except ImportError:
+    print("Required dependencies not found. Installing...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "psutil", "requests", "websocket-client"])
+    import psutil
+    import requests
+    import websocket
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description="ActivTrack Desktop Agent")
+parser.add_argument("--org_id", type=int, help="Organization ID")
+parser.add_argument("--api_url", type=str, help="API URL")
+parser.add_argument("--ws_url", type=str, help="WebSocket URL")
+parser.add_argument("--config_file", type=str, help="Config file path")
+parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+args = parser.parse_args()
 
 # Configure logging
 log_dir = Path(os.path.expanduser("~/.activtrack"))
@@ -30,7 +51,7 @@ log_dir.mkdir(exist_ok=True)
 log_file = log_dir / "agent.log"
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG if args.debug else logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(log_file),
@@ -40,28 +61,37 @@ logging.basicConfig(
 
 logger = logging.getLogger("ActivTrack-Agent")
 
-# Constants
-CONFIG_PATH = log_dir / "config.json"
-API_ENDPOINT = "http://localhost:5000/api"  # Default API endpoint
-WS_ENDPOINT = "ws://localhost:5000/ws"      # Default WebSocket endpoint
+# Constants and defaults
+CONFIG_PATH = args.config_file if args.config_file else log_dir / "config.json"
+DEFAULT_API_ENDPOINT = "http://localhost:5000/api"
+DEFAULT_WS_ENDPOINT = "ws://localhost:5000/ws"
 ACTIVITY_CHECK_INTERVAL = 10  # Check running apps every 10 seconds
+SCREENSHOT_INTERVAL = 300  # Take screenshot every 5 minutes (300 seconds)
 RESTRICTED_APP_TIMEOUT = 120  # 2 minutes (in seconds)
+HEARTBEAT_INTERVAL = 60  # Send heartbeat every 60 seconds
 
 class DesktopAgent:
     """Cross-platform desktop monitoring agent for ActivTrack"""
     
     def __init__(self):
-        self.device_id = None
-        self.jwt_token = None
-        self.api_endpoint = API_ENDPOINT
-        self.ws_endpoint = WS_ENDPOINT
+        # Generate unique device ID if not present
+        self.device_id = str(uuid.uuid4())
+        self.organization_id = args.org_id  # Set from command line args
+        self.api_endpoint = args.api_url if args.api_url else DEFAULT_API_ENDPOINT
+        self.ws_endpoint = args.ws_url if args.ws_url else DEFAULT_WS_ENDPOINT
         self.username = getpass.getuser()
+        self.hostname = platform.node()
         self.running = True
+        self.connected = False
         self.ws = None
         self.ws_thread = None
         self.restricted_apps = []
         self.restricted_app_timers = {}
         self.event_queue = queue.Queue()
+        self.needs_init = True
+        self.screenshot_enabled = True
+        self.activity_tracking_enabled = True
+        self.idle_threshold = 300  # 5 minutes in seconds
         
         # Detect operating system
         self.os_type = platform.system()
@@ -69,9 +99,21 @@ class DesktopAgent:
         self.os_release = platform.release()
         
         logger.info(f"Agent initializing on {self.os_type} {self.os_release} ({self.os_version})")
+        logger.info(f"Device ID: {self.device_id}, Organization ID: {self.organization_id}")
+        logger.info(f"API Endpoint: {self.api_endpoint}")
+        logger.info(f"WebSocket Endpoint: {self.ws_endpoint}")
         
-        # Load configuration
+        # Load existing configuration if available
         self.load_config()
+        
+        # Register signal handlers for clean shutdown
+        signal.signal(signal.SIGINT, self.handle_signal)
+        signal.signal(signal.SIGTERM, self.handle_signal)
+    
+    def handle_signal(self, sig, frame):
+        """Handle termination signals"""
+        logger.info(f"Received signal {sig}, shutting down...")
+        self.running = False
     
     def load_config(self) -> None:
         """Load configuration from config file"""
@@ -83,26 +125,159 @@ class DesktopAgent:
             with open(CONFIG_PATH, "r") as f:
                 config = json.load(f)
             
-            self.device_id = config.get("device_id")
-            self.jwt_token = config.get("jwt")
-            self.api_endpoint = config.get("api_endpoint", API_ENDPOINT)
-            self.ws_endpoint = config.get("ws_endpoint", WS_ENDPOINT)
+            # Only use device_id from file if not already set
+            if not self.device_id and 'device_id' in config:
+                self.device_id = config.get("device_id")
             
-            if self.device_id and self.jwt_token:
-                logger.info(f"Loaded configuration for device ID: {self.device_id}")
-            else:
-                logger.warning("Configuration loaded but missing device_id or jwt")
+            # Only use organization_id from file if not already set
+            if not self.organization_id and 'organization_id' in config:
+                self.organization_id = config.get("organization_id")
+            
+            # Override API endpoint if specified in config
+            if not args.api_url and 'api_endpoint' in config:
+                self.api_endpoint = config.get("api_endpoint")
+            
+            # Override WebSocket endpoint if specified in config
+            if not args.ws_url and 'ws_endpoint' in config:
+                self.ws_endpoint = config.get("ws_endpoint")
+            
+            # Load settings
+            if 'screenshot_enabled' in config:
+                self.screenshot_enabled = config.get("screenshot_enabled", True)
+            
+            if 'activity_tracking_enabled' in config:
+                self.activity_tracking_enabled = config.get("activity_tracking_enabled", True)
+            
+            if 'idle_threshold' in config:
+                self.idle_threshold = config.get("idle_threshold", 300)
+            
+            if 'restricted_apps' in config:
+                self.restricted_apps = config.get("restricted_apps", [])
+            
+            logger.info(f"Loaded configuration: device_id={self.device_id}, organization_id={self.organization_id}")
+            logger.info(f"Settings: screenshot_enabled={self.screenshot_enabled}, activity_tracking_enabled={self.activity_tracking_enabled}")
+            
         except Exception as e:
             logger.error(f"Error loading configuration: {e}")
     
-    def save_config(self, config: Dict[str, Any]) -> None:
-        """Save configuration to config file"""
+    def save_config(self) -> None:
+        """Save current configuration to config file"""
         try:
+            config = {
+                'device_id': self.device_id,
+                'organization_id': self.organization_id,
+                'api_endpoint': self.api_endpoint,
+                'ws_endpoint': self.ws_endpoint,
+                'screenshot_enabled': self.screenshot_enabled,
+                'activity_tracking_enabled': self.activity_tracking_enabled,
+                'idle_threshold': self.idle_threshold,
+                'restricted_apps': self.restricted_apps
+            }
+            
             with open(CONFIG_PATH, "w") as f:
                 json.dump(config, f, indent=2)
+            
             logger.info("Configuration saved successfully")
         except Exception as e:
             logger.error(f"Error saving configuration: {e}")
+    
+    def get_machine_info(self) -> Dict[str, Any]:
+        """Get detailed machine information"""
+        try:
+            # Basic system info
+            info = {
+                'hostname': self.hostname,
+                'username': self.username,
+                'os_type': self.os_type,
+                'os_version': f"{self.os_release} ({self.os_version})",
+                'cpu_cores': psutil.cpu_count(logical=True),
+                'memory_total': psutil.virtual_memory().total,
+                'disk_total': {path.mountpoint: path.total for path in psutil.disk_partitions() if path.fstype},
+                'mac_address': self._get_mac_address(),
+                'ip_address': self._get_ip_address()
+            }
+            return info
+        except Exception as e:
+            logger.error(f"Error getting machine info: {e}")
+            return {
+                'hostname': self.hostname,
+                'username': self.username,
+                'os_type': self.os_type,
+                'os_version': f"{self.os_release} ({self.os_version})"
+            }
+    
+    def _get_mac_address(self) -> str:
+        """Get MAC address of default network interface"""
+        try:
+            if self.os_type == 'Windows':
+                # Windows approach
+                for interface_name, interface_addresses in psutil.net_if_addrs().items():
+                    for address in interface_addresses:
+                        if re.match(r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})', str(address.address)):
+                            return address.address
+            else:
+                # Unix-like approach
+                for interface_name, interface_addresses in psutil.net_if_addrs().items():
+                    if interface_name != 'lo':  # Skip loopback
+                        for address in interface_addresses:
+                            if re.match(r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})', str(address.address)):
+                                return address.address
+            return "unknown"
+        except Exception as e:
+            logger.error(f"Error getting MAC address: {e}")
+            return "unknown"
+    
+    def _get_ip_address(self) -> str:
+        """Get IP address of the machine"""
+        try:
+            # Get address of the interface connected to the outside world
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except:
+            # Fallback method
+            for interface_name, interface_addresses in psutil.net_if_addrs().items():
+                for address in interface_addresses:
+                    if address.family == socket.AF_INET and address.address != '127.0.0.1':
+                        return address.address
+            return "unknown"
+    
+    def is_idle(self) -> bool:
+        """Check if the system is idle based on user activity"""
+        try:
+            # Different implementation based on OS
+            if self.os_type == 'Windows':
+                # Windows-specific idle detection would go here
+                # For now we'll use a simplified approach
+                return False
+            elif self.os_type == 'Darwin':  # macOS
+                # macOS-specific idle detection would go here
+                return False
+            else:  # Linux
+                # Linux-specific idle detection would go here
+                return False
+        except Exception as e:
+            logger.error(f"Error checking idle state: {e}")
+            return False
+    
+    def get_active_window(self) -> Dict[str, Any]:
+        """Get information about the currently active window"""
+        try:
+            # Different implementation based on OS
+            if self.os_type == 'Windows':
+                # Windows implementation would use Win32 API
+                return {'title': 'Unknown', 'application': 'Unknown'}
+            elif self.os_type == 'Darwin':  # macOS
+                # macOS implementation would use Objective-C bridge
+                return {'title': 'Unknown', 'application': 'Unknown'}
+            else:  # Linux
+                # Linux implementation would use X11
+                return {'title': 'Unknown', 'application': 'Unknown'}
+        except Exception as e:
+            logger.error(f"Error getting active window: {e}")
+            return {'title': 'Unknown', 'application': 'Unknown'}
     
     def get_running_applications(self) -> List[Dict[str, Any]]:
         """Get list of currently running applications/processes"""
@@ -145,16 +320,40 @@ class DesktopAgent:
         return running_apps
     
     def _get_window_title_windows(self, pid: int) -> str:
-        """Get window title for Windows processes (stub)"""
+        """Get window title for Windows processes"""
         # This would require Windows-specific libraries like pywin32
-        # For now, we'll return empty string
+        # For now, we'll return empty string as a placeholder
         return ""
     
     def _get_window_title_macos(self, app_name: str) -> str:
-        """Get window title for macOS processes (stub)"""
+        """Get window title for macOS processes"""
         # This would require macOS-specific approach, potentially using AppleScript
-        # For now, we'll return empty string
+        # For now, we'll return empty string as a placeholder
         return ""
+    
+    def take_screenshot(self) -> Optional[Dict[str, Any]]:
+        """Take a screenshot of the current display"""
+        if not self.screenshot_enabled:
+            logger.debug("Screenshots are disabled in configuration")
+            return None
+        
+        try:
+            # This would implement actual screenshot functionality using platform-specific methods
+            # For now, we'll simulate it with placeholder data
+            active_window = self.get_active_window()
+            
+            screenshot_data = {
+                'timestamp': datetime.datetime.now().isoformat(),
+                'imageData': "base64_encoded_image_data_would_be_here",  # Placeholder
+                'title': active_window['title'],
+                'application': active_window['application']
+            }
+            
+            logger.debug("Screenshot taken successfully")
+            return screenshot_data
+        except Exception as e:
+            logger.error(f"Error taking screenshot: {e}")
+            return None
     
     def terminate_process(self, pid: int, name: str) -> bool:
         """Terminate a process based on its PID"""
@@ -187,7 +386,7 @@ class DesktopAgent:
             return False
     
     def check_restricted_apps(self) -> None:
-        """Check for restricted applications and start timers if found"""
+        """Check for restricted applications and enforce policies"""
         if not self.restricted_apps:
             return
         
@@ -241,11 +440,17 @@ class DesktopAgent:
             if elapsed_time >= 60 and not timer_info['warned']:
                 logger.warning(f"Restricted app warning: {timer_info['name']} running for 1 minute")
                 timer_info['warned'] = True
+                
+                # Show warning notification to user
+                self._show_restriction_warning(timer_info['name'])
             
             # Terminate after timeout (2 minutes)
             if elapsed_time >= RESTRICTED_APP_TIMEOUT:
                 if self.terminate_process(timer_info['pid'], timer_info['name']):
                     logger.info(f"Terminated restricted app: {timer_info['name']} after {elapsed_time:.1f} seconds")
+                    
+                    # Show termination notification to user
+                    self._show_termination_notification(timer_info['name'])
                     
                     # Log the termination event
                     self.event_queue.put({
@@ -261,34 +466,196 @@ class DesktopAgent:
         for key in keys_to_remove:
             self.restricted_app_timers.pop(key, None)
     
-    def send_activity_data(self, activities: List[Dict[str, Any]]) -> bool:
-        """Send activity data to the server"""
-        if not self.device_id or not self.jwt_token:
-            logger.error("Cannot send activity data: missing device_id or jwt_token")
+    def _show_restriction_warning(self, app_name: str) -> None:
+        """Display a warning to the user about restricted application"""
+        try:
+            message = f"WARNING: {app_name} is restricted by your organization policy. It will be closed automatically if still running in 1 minute."
+            
+            if self.os_type == 'Windows':
+                # Windows notification
+                try:
+                    from win10toast import ToastNotifier
+                    toaster = ToastNotifier()
+                    toaster.show_toast("ActivTrack Warning", message, duration=10)
+                except ImportError:
+                    # Fallback to simple message box
+                    subprocess.Popen(['msg', '*', message])
+            elif self.os_type == 'Darwin':  # macOS
+                # macOS notification
+                osascript = f'display notification "{message}" with title "ActivTrack Warning"'
+                subprocess.Popen(['osascript', '-e', osascript])
+            else:  # Linux
+                # Linux notification
+                try:
+                    subprocess.Popen(['notify-send', 'ActivTrack Warning', message])
+                except:
+                    pass  # Silently fail if notification tools aren't available
+        except Exception as e:
+            logger.error(f"Error showing restriction warning: {e}")
+    
+    def _show_termination_notification(self, app_name: str) -> None:
+        """Display a notification about application termination"""
+        try:
+            message = f"{app_name} has been closed due to organization policy restrictions."
+            
+            if self.os_type == 'Windows':
+                # Windows notification
+                try:
+                    from win10toast import ToastNotifier
+                    toaster = ToastNotifier()
+                    toaster.show_toast("ActivTrack Alert", message, duration=10)
+                except ImportError:
+                    # Fallback to simple message box
+                    subprocess.Popen(['msg', '*', message])
+            elif self.os_type == 'Darwin':  # macOS
+                # macOS notification
+                osascript = f'display notification "{message}" with title "ActivTrack Alert"'
+                subprocess.Popen(['osascript', '-e', osascript])
+            else:  # Linux
+                # Linux notification
+                try:
+                    subprocess.Popen(['notify-send', 'ActivTrack Alert', message])
+                except:
+                    pass  # Silently fail if notification tools aren't available
+        except Exception as e:
+            logger.error(f"Error showing termination notification: {e}")
+    
+    def track_activity(self) -> Dict[str, Any]:
+        """Track current user activity"""
+        if not self.activity_tracking_enabled:
+            logger.debug("Activity tracking is disabled in configuration")
+            return None
+        
+        try:
+            active_window = self.get_active_window()
+            is_idle = self.is_idle()
+            
+            activity_data = {
+                'startTime': datetime.datetime.now().isoformat(),
+                'endTime': datetime.datetime.now().isoformat(),  # Will be updated later
+                'application': active_window['application'],
+                'title': active_window['title'],
+                'website': self._extract_website_from_title(active_window['title']),
+                'duration': ACTIVITY_CHECK_INTERVAL,
+                'isActive': not is_idle
+            }
+            
+            return activity_data
+        except Exception as e:
+            logger.error(f"Error tracking activity: {e}")
+            return None
+    
+    def _extract_website_from_title(self, title: str) -> Optional[str]:
+        """Extract website URL from window title if present"""
+        # Simple regex to find URLs in window titles
+        url_pattern = r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+'
+        match = re.search(url_pattern, title)
+        if match:
+            return match.group(0)
+        
+        # Check for common browser patterns
+        browser_patterns = [
+            # Chrome, Firefox, etc. pattern: "Page Title - Website Name"
+            r'^.*\s-\s([\w\d]+\.\w+)$',
+            # Another pattern: "Website Name: Page Title"
+            r'^([\w\d]+\.\w+):.*$'
+        ]
+        
+        for pattern in browser_patterns:
+            match = re.search(pattern, title)
+            if match:
+                return match.group(1)
+        
+        return None
+    
+    def register_with_server(self) -> bool:
+        """Register this agent with the server and obtain necessary credentials"""
+        if not self.organization_id:
+            logger.error("Cannot register: Missing organization ID")
             return False
         
         try:
-            headers = {
-                'Authorization': f'Bearer {self.jwt_token}',
-                'Content-Type': 'application/json'
-            }
+            machine_info = self.get_machine_info()
             
             data = {
                 'device_id': self.device_id,
-                'username': self.username,
-                'timestamp': datetime.datetime.now().isoformat(),
-                'activities': activities
+                'organization_id': self.organization_id,
+                'hostname': machine_info['hostname'],
+                'username': machine_info['username'],
+                'os_type': machine_info['os_type'],
+                'os_version': machine_info['os_version'],
+                'mac_address': machine_info['mac_address'],
+                'ip_address': machine_info['ip_address'],
+                'system_info': machine_info
             }
             
+            logger.info(f"Registering with server: {self.api_endpoint}/agent-register")
+            logger.debug(f"Registration data: {data}")
+            
             response = requests.post(
-                f"{self.api_endpoint}/activity",
-                headers=headers,
+                f"{self.api_endpoint}/agent-register",
                 json=data,
                 timeout=10
             )
             
             if response.status_code == 200 or response.status_code == 201:
-                logger.debug(f"Activity data sent successfully: {len(activities)} activities")
+                response_data = response.json()
+                
+                # Check if we received settings
+                if 'settings' in response_data:
+                    settings = response_data['settings']
+                    
+                    # Update agent settings
+                    if 'screenshot_enabled' in settings:
+                        self.screenshot_enabled = settings['screenshot_enabled']
+                    
+                    if 'activity_tracking_enabled' in settings:
+                        self.activity_tracking_enabled = settings['activity_tracking_enabled']
+                    
+                    if 'idle_threshold' in settings:
+                        self.idle_threshold = settings['idle_threshold']
+                    
+                    if 'restricted_apps' in settings:
+                        self.restricted_apps = settings['restricted_apps']
+                    
+                    logger.info("Received and applied server settings")
+                
+                # Save updated configuration
+                self.save_config()
+                
+                logger.info("Agent registered successfully with server")
+                return True
+            else:
+                logger.error(f"Failed to register: HTTP {response.status_code}, {response.text}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error registering with server: {e}")
+            return False
+    
+    def send_activity_data(self, activity_data: Dict[str, Any]) -> bool:
+        """Send activity data to the server"""
+        if not self.organization_id:
+            logger.error("Cannot send activity data: Missing organization ID")
+            return False
+        
+        try:
+            data = {
+                'device_id': self.device_id,
+                'organization_id': self.organization_id,
+                'username': self.username,
+                'timestamp': datetime.datetime.now().isoformat(),
+                'activity': activity_data
+            }
+            
+            response = requests.post(
+                f"{self.api_endpoint}/activity",
+                json=data,
+                timeout=10
+            )
+            
+            if response.status_code == 200 or response.status_code == 201:
+                logger.debug("Activity data sent successfully")
                 return True
             else:
                 logger.error(f"Failed to send activity data: HTTP {response.status_code}, {response.text}")
@@ -296,6 +663,76 @@ class DesktopAgent:
                 
         except Exception as e:
             logger.error(f"Error sending activity data: {e}")
+            return False
+    
+    def send_screenshot(self, screenshot_data: Dict[str, Any]) -> bool:
+        """Send screenshot data to the server"""
+        if not self.organization_id:
+            logger.error("Cannot send screenshot: Missing organization ID")
+            return False
+        
+        try:
+            data = {
+                'device_id': self.device_id,
+                'organization_id': self.organization_id,
+                'username': self.username,
+                'timestamp': datetime.datetime.now().isoformat(),
+                'screenshot': screenshot_data
+            }
+            
+            response = requests.post(
+                f"{self.api_endpoint}/screenshot",
+                json=data,
+                timeout=30  # Longer timeout for image data
+            )
+            
+            if response.status_code == 200 or response.status_code == 201:
+                logger.debug("Screenshot sent successfully")
+                return True
+            else:
+                logger.error(f"Failed to send screenshot: HTTP {response.status_code}, {response.text}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error sending screenshot: {e}")
+            return False
+    
+    def send_heartbeat(self) -> bool:
+        """Send heartbeat to the server to indicate agent is running"""
+        if not self.organization_id:
+            logger.error("Cannot send heartbeat: Missing organization ID")
+            return False
+        
+        try:
+            # Get system metrics
+            cpu_percent = psutil.cpu_percent(interval=None)
+            memory_info = psutil.virtual_memory()
+            
+            data = {
+                'device_id': self.device_id,
+                'organization_id': self.organization_id,
+                'username': self.username,
+                'timestamp': datetime.datetime.now().isoformat(),
+                'cpu_usage': cpu_percent,
+                'memory_usage': memory_info.percent,
+                'is_idle': self.is_idle()
+            }
+            
+            response = requests.post(
+                f"{self.api_endpoint}/agent-status",
+                json=data,
+                timeout=10
+            )
+            
+            if response.status_code == 200 or response.status_code == 201:
+                logger.debug("Heartbeat sent successfully")
+                return True
+            else:
+                logger.error(f"Failed to send heartbeat: HTTP {response.status_code}, {response.text}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error sending heartbeat: {e}")
             return False
     
     def send_event_data(self) -> None:
@@ -313,20 +750,15 @@ class DesktopAgent:
             if not events:
                 return
             
-            headers = {
-                'Authorization': f'Bearer {self.jwt_token}',
-                'Content-Type': 'application/json'
-            }
-            
             data = {
                 'device_id': self.device_id,
+                'organization_id': self.organization_id,
                 'username': self.username,
                 'events': events
             }
             
             response = requests.post(
                 f"{self.api_endpoint}/events",
-                headers=headers,
                 json=data,
                 timeout=10
             )
@@ -341,55 +773,76 @@ class DesktopAgent:
     
     def connect_websocket(self) -> None:
         """Establish WebSocket connection to server for real-time updates"""
-        if not self.device_id or not self.jwt_token:
-            logger.error("Cannot connect WebSocket: missing device_id or jwt_token")
+        if not self.device_id or not self.organization_id:
+            logger.error("Cannot connect WebSocket: Missing device_id or organization_id")
             return
         
         # WebSocket URL with authentication parameters
-        ws_url = f"{self.ws_endpoint}?userId={self.device_id}&jwt={self.jwt_token}"
+        ws_url = f"{self.ws_endpoint}?userId={self.device_id}&organizationId={self.organization_id}"
         
         # Define WebSocket callbacks
         def on_message(ws, message):
             try:
                 data = json.loads(message)
+                logger.debug(f"WebSocket message received: {data.get('event', 'unknown')}")
                 
                 if data.get('event') == 'restricted_apps_update':
                     self.restricted_apps = data.get('data', {}).get('restricted_apps', [])
                     logger.info(f"Received restricted apps update: {self.restricted_apps}")
+                    self.save_config()
                 
                 elif data.get('event') == 'config_update':
                     config_data = data.get('data', {})
                     logger.info("Received configuration update")
                     
-                    # Update relevant configuration
-                    if 'jwt' in config_data:
-                        self.jwt_token = config_data['jwt']
+                    # Update agent settings
+                    if 'screenshot_enabled' in config_data:
+                        self.screenshot_enabled = config_data['screenshot_enabled']
+                    
+                    if 'activity_tracking_enabled' in config_data:
+                        self.activity_tracking_enabled = config_data['activity_tracking_enabled']
+                    
+                    if 'idle_threshold' in config_data:
+                        self.idle_threshold = config_data['idle_threshold']
                     
                     # Save the updated config
-                    self.save_config({
-                        'device_id': self.device_id,
-                        'jwt': self.jwt_token,
-                        'api_endpoint': self.api_endpoint,
-                        'ws_endpoint': self.ws_endpoint
-                    })
+                    self.save_config()
+                
+                elif data.get('event') == 'take_screenshot_now':
+                    logger.info("Received request for immediate screenshot")
+                    screenshot_data = self.take_screenshot()
+                    if screenshot_data:
+                        self.send_screenshot(screenshot_data)
+                
+                elif data.get('event') == 'terminate_application':
+                    app_data = data.get('data', {})
+                    if 'pid' in app_data and 'name' in app_data:
+                        logger.info(f"Received request to terminate application: {app_data['name']} (PID: {app_data['pid']})")
+                        self.terminate_process(app_data['pid'], app_data['name'])
             except Exception as e:
                 logger.error(f"Error processing WebSocket message: {e}")
         
         def on_error(ws, error):
             logger.error(f"WebSocket error: {error}")
+            self.connected = False
         
         def on_close(ws, close_status_code, close_msg):
             logger.warning(f"WebSocket connection closed: {close_status_code}, {close_msg}")
+            self.connected = False
         
         def on_open(ws):
             logger.info("WebSocket connection established")
+            self.connected = True
             
             # Send initial connection message
             ws.send(json.dumps({
                 'event': 'agent_connected',
+                'userId': self.device_id,
+                'organizationId': self.organization_id,
                 'data': {
                     'device_id': self.device_id,
                     'username': self.username,
+                    'hostname': self.hostname,
                     'os_type': self.os_type,
                     'os_version': f"{self.os_release} ({self.os_version})"
                 }
@@ -403,81 +856,98 @@ class DesktopAgent:
             on_error=on_error,
             on_close=on_close
         )
-        
-        # Run WebSocket connection in a separate thread
-        self.ws_thread = threading.Thread(target=self.ws.run_forever, daemon=True)
-        self.ws_thread.start()
+    
+    def run_websocket(self) -> None:
+        """Run WebSocket connection in a separate thread"""
+        while self.running:
+            try:
+                # Only try to connect if not already connected
+                if not self.connected:
+                    logger.info("Starting WebSocket connection...")
+                    self.connect_websocket()
+                    
+                    # Run forever; this call blocks until the connection is closed
+                    self.ws.run_forever(ping_interval=30, ping_timeout=10)
+                    
+                    # If we get here, the connection was closed
+                    logger.info("WebSocket connection ended, will retry...")
+                    time.sleep(5)  # Wait before reconnecting
+            except Exception as e:
+                logger.error(f"Error in WebSocket thread: {e}")
+                time.sleep(5)  # Wait before reconnecting
     
     def run(self) -> None:
         """Main agent loop"""
-        logger.info("Starting ActivTrack desktop agent")
+        # First, try to initialize agent with server
+        if self.needs_init:
+            if self.register_with_server():
+                self.needs_init = False
+            else:
+                logger.warning("Agent initialization failed, will retry...")
+                time.sleep(30)
+                return
         
-        # Connect to WebSocket for real-time updates
-        self.connect_websocket()
+        # Start WebSocket thread
+        if not self.ws_thread or not self.ws_thread.is_alive():
+            self.ws_thread = threading.Thread(target=self.run_websocket)
+            self.ws_thread.daemon = True
+            self.ws_thread.start()
+            logger.info("WebSocket thread started")
         
-        # Setup reconnection logic
-        last_ws_check = time.time()
-        last_activity_time = time.time()
+        # Tracking variables
+        last_screenshot_time = time.time()
+        last_heartbeat_time = time.time()
         
-        try:
-            while self.running:
-                current_time = time.time()
+        while self.running:
+            current_time = time.time()
+            
+            try:
+                # Check for restricted applications
+                self.check_restricted_apps()
                 
-                # Check if it's time to gather activity data
-                if current_time - last_activity_time >= ACTIVITY_CHECK_INTERVAL:
-                    # Get running applications
-                    activities = self.get_running_applications()
-                    
-                    # Send data to server
-                    if activities:
-                        self.send_activity_data(activities)
-                    
-                    # Check for restricted applications
-                    self.check_restricted_apps()
-                    
-                    # Send any pending events
-                    self.send_event_data()
-                    
-                    last_activity_time = current_time
+                # Track current activity
+                activity_data = self.track_activity()
+                if activity_data:
+                    self.send_activity_data(activity_data)
                 
-                # Check WebSocket connection and reconnect if needed
-                if current_time - last_ws_check >= 60:  # Check every minute
-                    if not self.ws_thread or not self.ws_thread.is_alive():
-                        logger.info("WebSocket connection lost, reconnecting...")
-                        self.connect_websocket()
-                    last_ws_check = current_time
+                # Take periodic screenshots
+                if current_time - last_screenshot_time >= SCREENSHOT_INTERVAL:
+                    screenshot_data = self.take_screenshot()
+                    if screenshot_data:
+                        self.send_screenshot(screenshot_data)
+                    last_screenshot_time = current_time
                 
-                # Sleep to avoid high CPU usage
-                time.sleep(1)
+                # Send periodic heartbeats
+                if current_time - last_heartbeat_time >= HEARTBEAT_INTERVAL:
+                    self.send_heartbeat()
+                    last_heartbeat_time = current_time
                 
-        except KeyboardInterrupt:
-            logger.info("Agent stopping due to keyboard interrupt")
-        except Exception as e:
-            logger.error(f"Unexpected error in agent main loop: {e}")
-        finally:
-            # Clean up
-            if self.ws:
-                self.ws.close()
-            logger.info("ActivTrack desktop agent stopped")
-    
-    def stop(self) -> None:
-        """Stop the agent"""
-        self.running = False
+                # Send any pending events
+                self.send_event_data()
+                
+                # Sleep for the activity check interval
+                time.sleep(ACTIVITY_CHECK_INTERVAL)
+                
+            except Exception as e:
+                logger.error(f"Error in main loop: {e}")
+                time.sleep(ACTIVITY_CHECK_INTERVAL)
 
-
-def setup_signal_handlers(agent):
-    """Setup signal handlers for graceful shutdown"""
-    def signal_handler(sig, frame):
-        logger.info(f"Received signal {sig}, shutting down...")
-        agent.stop()
-        sys.exit(0)
-    
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
+def main():
+    """Main entry point"""
+    try:
+        agent = DesktopAgent()
+        
+        # Run the agent loop
+        logger.info("Starting ActivTrack agent...")
+        while True:
+            agent.run()
+            
+            # If agent.running is False, it's time to exit
+            if not agent.running:
+                break
+    except Exception as e:
+        logger.critical(f"Critical error in agent: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    # Create and run the agent
-    agent = DesktopAgent()
-    setup_signal_handlers(agent)
-    agent.run()
+    main()

@@ -927,7 +927,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Desktop Agent Download Endpoints
+  // Desktop Agent Configuration Endpoint - Returns settings for the agent
+  router.get("/agent-config", async (req: Request, res: Response) => {
+    try {
+      // Get organization ID from query parameter
+      const organizationId = parseInt(req.query.organizationId as string) || 1;
+      
+      // Get the organization
+      const organization = await storage.getOrganization(organizationId);
+      
+      if (!organization) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+      
+      // Get agent configuration for the organization
+      // In a real application, this would be fetched from a database
+      const config = {
+        organization_id: organization.id,
+        organization_name: organization.name,
+        api_endpoint: process.env.VITE_API_URL || 'http://localhost:5000/api',
+        ws_endpoint: process.env.VITE_WS_URL || 'ws://localhost:5000/ws',
+        screenshot_enabled: true,
+        activity_tracking_enabled: true,
+        idle_threshold: parseInt(process.env.AGENT_IDLE_THRESHOLD as string) || 300,
+        screenshot_interval: parseInt(process.env.AGENT_SCREENSHOT_INTERVAL as string) || 300,
+        activity_check_interval: parseInt(process.env.AGENT_ACTIVITY_CHECK_INTERVAL as string) || 10,
+        heartbeat_interval: parseInt(process.env.AGENT_HEARTBEAT_INTERVAL as string) || 60,
+        restricted_apps: []
+      };
+      
+      res.json(config);
+    } catch (error) {
+      console.error("Error handling agent configuration request:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Agent Registration Endpoint - Registers a new agent with the system
+  router.post("/agent-register", async (req: Request, res: Response) => {
+    try {
+      const { 
+        device_id, 
+        organization_id, 
+        hostname, 
+        username, 
+        os_type,
+        os_version,
+        mac_address,
+        ip_address, 
+        system_info 
+      } = req.body;
+      
+      // Validate required fields
+      if (!device_id || !organization_id) {
+        return res.status(400).json({ message: "Missing required fields: device_id and organization_id are required" });
+      }
+      
+      // Get the organization
+      const organization = await storage.getOrganization(organization_id);
+      
+      if (!organization) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+      
+      // In a real implementation, you would store the agent information in the database
+      // For now, we'll just log it
+      console.log(`Registering agent - Device ID: ${device_id}, Organization: ${organization.name}, Hostname: ${hostname}`);
+      
+      // Return success with configuration settings
+      res.status(200).json({
+        message: "Agent registered successfully",
+        settings: {
+          organization_id: organization.id,
+          organization_name: organization.name,
+          screenshot_enabled: true,
+          activity_tracking_enabled: true,
+          idle_threshold: parseInt(process.env.AGENT_IDLE_THRESHOLD as string) || 300,
+          restricted_apps: []
+        }
+      });
+    } catch (error) {
+      console.error("Error handling agent registration:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Desktop Agent Download Endpoints - Auto-configured with organization ID
   router.get("/agent/download/:platform", async (req: Request, res: Response) => {
     try {
       const platform = req.params.platform;
@@ -938,92 +1023,126 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Default organization for anonymous downloads - use organization ID 1
       // This enables downloading agents without requiring login
-      const defaultOrganizationId = 1;
-      const organization = await storage.getOrganization(defaultOrganizationId);
+      // First try to get organization by ID
+      let organization = await storage.getOrganization(1);
       
+      // If not found by ID, try to get by name
       if (!organization) {
-        return res.status(404).json({ message: "Default organization not found" });
+        organization = await storage.getOrganizationByName("Default Organization");
       }
       
-      // Set headers for file download - now using executable formats for better user experience
-      const fileName = platform === 'python' 
-        ? 'ActivTrack_Python_Agent.exe' 
-        : (platform === 'windows' ? 'ActivTrack_Windows_Setup.exe' : 'ActivTrack_macOS.pkg');
+      // If still not found, create a new one
+      if (!organization) {
+        try {
+          organization = await storage.createOrganization({
+            name: "Default Organization",
+            description: "Auto-created default organization for agent downloads",
+            isActive: true,
+            settings: {} 
+          });
+          
+          console.log("Created default organization:", organization);
+        } catch (err) {
+          // In case of race condition, try to get by name again
+          organization = await storage.getOrganizationByName("Default Organization");
+          if (!organization) {
+            console.error("Failed to create default organization and could not find existing one:", err);
+            return res.status(500).json({ message: "Internal server error" });
+          }
+        }
+      }
       
-      // If Python agent is requested, use different content
+      // API and WebSocket URLs
+      const apiUrl = process.env.VITE_API_URL || 'http://localhost:5000/api';
+      const wsUrl = process.env.VITE_WS_URL || 'ws://localhost:5000/ws';
+      
+      // Set headers for file download - using executable formats for better user experience
+      const fileName = platform === 'python' 
+        ? `ActivTrack_Python_Agent.exe` 
+        : (platform === 'windows' ? `ActivTrack_Windows_Setup.exe` : `ActivTrack_macOS.pkg`);
+      
+      // If Python agent is requested, use different executable content
       let fileContent = '';
       
       if (platform === 'python') {
-        fileContent = `README - ActivTrack Python Desktop Agent
+        fileContent = `#!/usr/bin/env python3
+# ActivTrack Python Agent Installer
+# This is a simulated installer that would normally be a full executable
 
-Platform: Cross-platform (Windows, macOS, Linux)
-Organization: ${organization.name} (ID: ${organization.id})
-Configuration URL: /api/agent-config?organizationId=${organization.id}
+import os
+import sys
+import subprocess
 
-INSTALLATION INSTRUCTIONS
-------------------------
-1. Run the ActivTrack_Python_Agent.exe executable file
-2. The installer will automatically verify Python 3.6+ installation
-3. Required dependencies will be installed automatically
-4. Follow the on-screen prompts to configure the agent
-5. The agent will start automatically after installation
-
-COMPATIBILITY
-------------------------
-- Windows 7, 8, 8.1, 10, and 11
-- All macOS versions from 10.12 Sierra to the latest macOS
-- Ubuntu, Debian, Fedora, RHEL and other major Linux distributions
-- System requirements: Python 3.6 or higher, 512MB RAM, 20MB disk space
-
-FEATURES
-------------------------
-- Cross-platform monitoring on Windows, macOS, and Linux
-- Real-time activity tracking of applications and processes
-- Work hours and productivity classification
-- Application restriction enforcement
-- Offline data collection with sync when reconnected
-- WebSocket real-time communication
-- Lightweight CPU and memory footprint
-- Automatic startup integration with the operating system
-- Privacy protection with configurable data collection settings
-
-NOTE: This is a simulated agent installer package for demonstration purposes.
-In a production environment, this would contain the actual Python agent code.`;
-      } else {
-        // Standard agent content for Windows/macOS
-        fileContent = `README - ActivTrack Desktop Agent
-
-Platform: ${platform.toUpperCase()}
-Organization: ${organization.name} (ID: ${organization.id})
-Configuration URL: /api/agent-config?organizationId=${organization.id}
-
-INSTALLATION INSTRUCTIONS
-------------------------
-${platform === 'windows' ? 
-'1. Run the ActivTrack_Windows_Setup.exe file\n2. If prompted by Windows security, click "More info" and "Run anyway"\n3. Follow the on-screen installation wizard\n4. The agent will start automatically after installation' : 
-'1. Open the ActivTrack_macOS.pkg file\n2. Follow the on-screen installation wizard\n3. Grant the required permissions when prompted\n4. The agent will start automatically after installation'}
-
-COMPATIBILITY
-------------------------
-${platform === 'windows' ? '- Windows 7, 8, 8.1, 10, and 11 supported (32-bit and 64-bit versions)' : '- All macOS versions from 10.12 Sierra to the latest macOS Sonoma supported'}
-- System requirements: 1GB RAM, 50MB disk space
-
-FEATURES
-------------------------
-- Real-time activity tracking (active applications, websites, and documents)
-- Work hours and productivity classification
-- Idle time detection and exclusion
-- Regular screenshots with customizable interval
-- Application and website category reporting
-- USB device tracking and alerting
-- User behavior anomaly detection
-- Application blocking for restricted applications
-- Privacy protection with data masking options
-- Offline data collection with sync when reconnected`;
+print("==================================================")
+print("ActivTrack Python Agent Installer")
+print("==================================================")
+print()
+print(f"Organization: ${organization.name} (ID: ${organization.id})")
+print(f"API Endpoint: ${apiUrl}")
+print(f"WebSocket Endpoint: ${wsUrl}")
+print()
+print("This installer would:")
+print("1. Verify Python 3.6+ is installed")
+print("2. Install required dependencies: psutil, requests, websocket-client")
+print("3. Setup the agent with your organization ID pre-configured")
+print("4. Configure autostart based on your operating system")
+print("5. Start the agent in the background")
+print()
+print("In a production environment, this would be a real executable.")
+print("For this demonstration, we're simulating the installation process.")
+print()
+print("Installation complete! The agent would now be running in the background.")
+print()
+input("Press Enter to exit...")
+`;
+      } else if (platform === 'windows') {
+        fileContent = `@echo off
+echo ==================================================
+echo ActivTrack Windows Agent Installer
+echo ==================================================
+echo.
+echo Organization: ${organization.name} (ID: ${organization.id})
+echo API Endpoint: ${apiUrl}
+echo WebSocket Endpoint: ${wsUrl}
+echo.
+echo This installer would:
+echo 1. Install the ActivTrack agent for Windows
+echo 2. Configure it for your organization automatically
+echo 3. Set up autostart with Windows
+echo 4. Start monitoring in the background
+echo.
+echo In a production environment, this would be a real executable.
+echo For this demonstration, we're simulating the installation process.
+echo.
+echo Installation complete! The agent would now be running in the background.
+echo.
+echo Press any key to exit...
+pause > nul
+`;
+      } else { // macOS
+        fileContent = `#!/bin/bash
+echo "=================================================="
+echo "ActivTrack macOS Agent Installer"
+echo "=================================================="
+echo
+echo "Organization: ${organization.name} (ID: ${organization.id})"
+echo "API Endpoint: ${apiUrl}"
+echo "WebSocket Endpoint: ${wsUrl}"
+echo
+echo "This installer would:"
+echo "1. Install the ActivTrack agent for macOS"
+echo "2. Configure it for your organization automatically"
+echo "3. Set up autostart with LaunchAgents"
+echo "4. Start monitoring in the background"
+echo
+echo "In a production environment, this would be a real executable."
+echo "For this demonstration, we're simulating the installation process."
+echo
+echo "Installation complete! The agent would now be running in the background."
+echo
+read -p "Press Enter to exit..."
+`;
       }
-      
-      fileContent += `\n\nNOTE: This is a simulated agent installer package for demonstration purposes.
-In a production environment, this would contain the actual agent software.`;
       
       res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
       // Set appropriate content type based on file extension
